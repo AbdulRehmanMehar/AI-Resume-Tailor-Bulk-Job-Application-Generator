@@ -23,11 +23,16 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
-import { Loader2, Download, AlertCircle } from "lucide-react";
+import { Loader2, Download, AlertCircle, FileText } from "lucide-react";
 import { Packer } from "docx";
 import saveAs from "file-saver";
 import { Document, Paragraph, TextRun } from "docx";
 import * as xlsx from "xlsx";
+import { ResumeRenderer } from "@/components/resume-renderer";
+import { ResumeLoadingSkeleton } from "@/components/resume-loading-skeleton";
+import { ModernResumePreview } from "@/components/modern-resume-preview";
+import { sampleResume, sampleJobs } from "@/lib/sample-data";
+import { createModernResumeDocument } from "@/lib/resume-docx-generator";
 
 interface Job {
   id: number;
@@ -50,6 +55,7 @@ export default function ResumeTailorPage() {
   const [error, setError] = useState<string | null>(null);
   const [isParsingResume, setIsParsingResume] = useState(false);
   const [isParsingJobs, setIsParsingJobs] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
 
   const handleResumeFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -229,28 +235,12 @@ export default function ResumeTailorPage() {
     setError(null);
 
     try {
-      // Step 1: Upload the resume text to our dedicated upload endpoint.
-      const resumeBlob = new Blob([baseResumeText], { type: "text/plain" });
-      const uploadFormData = new FormData();
-      uploadFormData.append("resumeFile", resumeBlob, "resume.txt");
-
-      const uploadResponse = await fetch("/api/upload-resume", {
-        method: "POST",
-        body: uploadFormData,
-      });
-
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to upload resume file.");
-      }
-      const { fileId } = await uploadResponse.json();
-
-      // Step 2: Start the generation process with the returned fileId.
+      // Send resume content directly instead of uploading as file
       const startResponse = await fetch("/api/generate-resume/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fileId: fileId,
+          resumeContent: baseResumeText,
           jobDescription: `${job.title}\n\n${job.description}`,
         }),
       });
@@ -272,24 +262,65 @@ export default function ResumeTailorPage() {
     }
   };
 
-  const downloadDocx = async (content: string, title: string) => {
-    const doc = new Document({
-      sections: [
-        {
-          properties: {},
-          children: content.split("\n").map(
-            (text) =>
-              new Paragraph({
-                children: [new TextRun(text)],
-              })
-          ),
-        },
-      ],
+  const loadDemo = () => {
+    setBaseResumeText(sampleResume);
+    setJobs(sampleJobs);
+    setShowDemo(true);
+
+    // Simulate some generated resumes for demo
+    const demoResumes: TailoredResume = {};
+    sampleJobs.forEach((job, index) => {
+      if (index < 2) {
+        demoResumes[job.id] = {
+          status: "success",
+          content: `${sampleResume}
+
+TAILORED FOR: ${job.title}
+
+This resume has been specifically tailored to highlight the most relevant experience and skills for the ${job.title} position. Key adjustments include:
+
+• Emphasized relevant technical skills and technologies mentioned in the job description
+• Highlighted specific achievements that align with the role requirements  
+• Adjusted professional summary to match the company's needs
+• Reordered experience to showcase most relevant positions first
+• Added keywords to improve ATS compatibility
+
+The tailored content maintains the candidate's authentic experience while presenting it in the most compelling way for this specific opportunity.`,
+        };
+      }
     });
 
-    const blob = await Packer.toBlob(doc);
-    const safeTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
-    saveAs(blob, `resume_for_${safeTitle}.docx`);
+    setTailoredResumes(demoResumes);
+  };
+
+  const downloadDocx = async (content: string, title: string) => {
+    try {
+      // Use the modern resume generator
+      const doc = createModernResumeDocument(content, title);
+      const blob = await Packer.toBlob(doc);
+      const safeTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+      saveAs(blob, `modern_resume_for_${safeTitle}.docx`);
+    } catch (error) {
+      console.error("Error generating DOCX:", error);
+      // Fallback to simple version if modern generator fails
+      const doc = new Document({
+        sections: [
+          {
+            properties: {},
+            children: content.split("\n").map(
+              (text) =>
+                new Paragraph({
+                  children: [new TextRun(text)],
+                })
+            ),
+          },
+        ],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      const safeTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+      saveAs(blob, `resume_for_${safeTitle}.docx`);
+    }
   };
 
   return (
@@ -302,6 +333,22 @@ export default function ResumeTailorPage() {
           <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
             Generate tailored resumes for multiple jobs in seconds.
           </p>
+          <div className="mt-4 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button
+              variant="outline"
+              onClick={loadDemo}
+              className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
+            >
+              ✨ View Beautiful Resume Demo
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => window.open("/bulk-jobs", "_blank")}
+              className="bg-purple-50 hover:bg-purple-100 text-purple-600 border-purple-200"
+            >
+              🚀 Bulk Job Generator
+            </Button>
+          </div>
         </div>
 
         {error && (
@@ -469,6 +516,42 @@ export default function ResumeTailorPage() {
                   ))}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Modern Resume Previews Section */}
+        {Object.entries(tailoredResumes).some(
+          ([_, resume]) => resume.status === "success"
+        ) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Generated Modern Resumes
+              </CardTitle>
+              <CardDescription>
+                Preview your beautifully formatted resumes before downloading.
+                Each resume is professionally designed with modern styling.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {Object.entries(tailoredResumes)
+                .filter(([_, resume]) => resume.status === "success")
+                .map(([jobId, resume]) => {
+                  const job = jobs.find((j) => j.id.toString() === jobId);
+                  return (
+                    <ModernResumePreview
+                      key={jobId}
+                      content={resume.content!}
+                      jobTitle={job?.title}
+                      onDownload={() =>
+                        downloadDocx(resume.content!, job?.title || "resume")
+                      }
+                      className="w-full"
+                    />
+                  );
+                })}
             </CardContent>
           </Card>
         )}
