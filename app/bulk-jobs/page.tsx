@@ -16,7 +16,7 @@ export default function BulkJobsPage() {
       <main className="max-w-7xl mx-auto space-y-8">
         {/* Header with Navigation */}
         <div className="flex items-center justify-between">
-          <Link href="/">
+          {/* <Link href="/">
             <Button
               variant="ghost"
               className="flex items-center gap-2 text-gray-600 hover:text-gray-800"
@@ -24,11 +24,11 @@ export default function BulkJobsPage() {
               <ArrowLeft className="h-4 w-4" />
               Back to Resume Tailor
             </Button>
-          </Link>
+          </Link> */}
         </div>
 
         {/* Hero Section */}
-        <div className="text-center space-y-6 py-8">
+        <div className="text-center space-y-6 py-8 !hidden">
           <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-100 to-purple-100 px-6 py-3 rounded-full">
             <Zap className="h-5 w-5 text-blue-600" />
             <span className="text-blue-800 font-medium">

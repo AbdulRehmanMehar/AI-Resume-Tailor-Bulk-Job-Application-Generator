@@ -16,6 +16,7 @@ import {
   LevelFormat,
   convertInchesToTwip,
   ISectionOptions,
+  ExternalHyperlink,
 } from "docx";
 
 // Define modern color scheme inspired by Canva templates
@@ -38,36 +39,40 @@ const FONT_SIZES = {
 };
 
 interface TailoredResumeData {
-  full_name: string;
-  source_content_analysis: {
-    has_email: boolean;
-    has_phone: boolean;
-    has_location: boolean;
-    has_linkedin: boolean;
-    has_github: boolean;
-    has_social_links: boolean;
-    has_relocation_willingness: boolean;
+  full_name?: string;
+  source_content_analysis?: {
+    has_email?: boolean;
+    has_phone?: boolean;
+    has_location?: boolean;
+    has_linkedin?: boolean;
+    has_github?: boolean;
+    has_social_links?: boolean;
+    has_relocation_willingness?: boolean;
     has_professional_summary?: boolean; // Always true, but kept for compatibility
-    has_skills: boolean;
-    has_work_experience: boolean;
-    has_education: boolean;
-    has_certifications: boolean;
-    has_projects: boolean;
-    has_languages: boolean;
-    has_awards: boolean;
+    has_skills?: boolean;
+    has_work_experience?: boolean;
+    has_education?: boolean;
+    has_certifications?: boolean;
+    has_projects?: boolean;
+    has_languages?: boolean;
+    has_awards?: boolean;
   };
-  contact_information: {
+  contact_information?: {
     email?: string;
     phone?: string;
     location?: string;
     linkedin?: string;
     github?: string;
     website?: string;
+    social_links?: Array<{
+      platform?: string;
+      url?: string;
+    }>;
     willing_to_relocate?: boolean;
   };
-  professional_summary: string;
-  skills: string[];
-  work_experience: Array<{
+  professional_summary?: string;
+  skills?: string[];
+  work_experience?: Array<{
     has_job_title?: boolean;
     has_company?: boolean;
     has_location?: boolean;
@@ -81,7 +86,7 @@ interface TailoredResumeData {
     end_date?: string | null;
     responsibilities?: string[];
   }>;
-  education: Array<{
+  education?: Array<{
     has_degree?: boolean;
     has_institution?: boolean;
     has_location?: boolean;
@@ -131,10 +136,27 @@ interface TailoredResumeData {
   }>;
 }
 
+// Helper function to detect if a string is likely a URL
+function isLikelyUrl(text: string): boolean {
+  return (
+    text.includes(".com") ||
+    text.includes(".org") ||
+    text.includes(".net") ||
+    text.includes("linkedin.com") ||
+    text.includes("github.com") ||
+    text.startsWith("http://") ||
+    text.startsWith("https://") ||
+    text.startsWith("www.")
+  );
+}
+
 export function generateModernResumeDocx(
   resumeData: TailoredResumeData
 ): Document {
   const children: Paragraph[] = [];
+
+  // Defensive check for full_name
+  const fullName = resumeData.full_name || "Resume Holder";
 
   // Header Section with Name and Contact Info
   children.push(
@@ -142,7 +164,7 @@ export function generateModernResumeDocx(
     new Paragraph({
       children: [
         new TextRun({
-          text: resumeData.full_name.toUpperCase(),
+          text: fullName.toUpperCase(),
           size: FONT_SIZES.name,
           bold: true,
           color: COLORS.primary,
@@ -155,30 +177,15 @@ export function generateModernResumeDocx(
   );
 
   // Build contact information dynamically - only include info that was in original resume
-  const contactParts: TextRun[] = [];
+  const contactChildren: (TextRun | ExternalHyperlink)[] = [];
 
   // Email - only if detected in original resume
   if (
-    resumeData.source_content_analysis.has_email &&
-    resumeData.contact_information.email
+    resumeData.source_content_analysis?.has_email &&
+    resumeData.contact_information?.email
   ) {
-    contactParts.push(
-      new TextRun({
-        text: resumeData.contact_information.email,
-        size: FONT_SIZES.body,
-        color: COLORS.text,
-        font: "Calibri",
-      })
-    );
-  }
-
-  // Phone - only if detected in original resume
-  if (
-    resumeData.source_content_analysis.has_phone &&
-    resumeData.contact_information.phone
-  ) {
-    if (contactParts.length > 0) {
-      contactParts.push(
+    if (contactChildren.length > 0) {
+      contactChildren.push(
         new TextRun({
           text: " • ",
           size: FONT_SIZES.body,
@@ -187,7 +194,42 @@ export function generateModernResumeDocx(
         })
       );
     }
-    contactParts.push(
+
+    // Create clickable email link
+    contactChildren.push(
+      new ExternalHyperlink({
+        children: [
+          new TextRun({
+            text: resumeData.contact_information.email,
+            size: FONT_SIZES.body,
+            color: COLORS.primary,
+            font: "Calibri",
+            underline: {
+              type: UnderlineType.SINGLE,
+            },
+          }),
+        ],
+        link: `mailto:${resumeData.contact_information.email}`,
+      })
+    );
+  }
+
+  // Phone - only if detected in original resume
+  if (
+    resumeData.source_content_analysis?.has_phone &&
+    resumeData.contact_information?.phone
+  ) {
+    if (contactChildren.length > 0) {
+      contactChildren.push(
+        new TextRun({
+          text: " • ",
+          size: FONT_SIZES.body,
+          color: COLORS.secondary,
+          font: "Calibri",
+        })
+      );
+    }
+    contactChildren.push(
       new TextRun({
         text: resumeData.contact_information.phone,
         size: FONT_SIZES.body,
@@ -199,11 +241,11 @@ export function generateModernResumeDocx(
 
   // Location - only if detected in original resume
   if (
-    resumeData.source_content_analysis.has_location &&
-    resumeData.contact_information.location?.trim()
+    resumeData.source_content_analysis?.has_location &&
+    resumeData.contact_information?.location?.trim()
   ) {
-    if (contactParts.length > 0) {
-      contactParts.push(
+    if (contactChildren.length > 0) {
+      contactChildren.push(
         new TextRun({
           text: " • ",
           size: FONT_SIZES.body,
@@ -212,7 +254,7 @@ export function generateModernResumeDocx(
         })
       );
     }
-    contactParts.push(
+    contactChildren.push(
       new TextRun({
         text: resumeData.contact_information.location,
         size: FONT_SIZES.body,
@@ -224,11 +266,11 @@ export function generateModernResumeDocx(
 
   // LinkedIn - only if detected in original resume
   if (
-    resumeData.source_content_analysis.has_linkedin &&
-    resumeData.contact_information.linkedin?.trim()
+    resumeData.source_content_analysis?.has_linkedin &&
+    resumeData.contact_information?.linkedin?.trim()
   ) {
-    if (contactParts.length > 0) {
-      contactParts.push(
+    if (contactChildren.length > 0) {
+      contactChildren.push(
         new TextRun({
           text: " • ",
           size: FONT_SIZES.body,
@@ -237,23 +279,49 @@ export function generateModernResumeDocx(
         })
       );
     }
-    contactParts.push(
-      new TextRun({
-        text: "LinkedIn",
-        size: FONT_SIZES.body,
-        color: COLORS.primary,
-        font: "Calibri",
+
+    const linkedinText = resumeData.contact_information.linkedin;
+    let linkedinUrl = linkedinText;
+    let displayText = linkedinText;
+
+    // Handle different LinkedIn formats
+    if (!linkedinText.startsWith("http")) {
+      if (linkedinText.includes("linkedin.com/in/")) {
+        linkedinUrl = `https://${linkedinText}`;
+      } else if (linkedinText.startsWith("linkedin.com/in/")) {
+        linkedinUrl = `https://${linkedinText}`;
+      } else {
+        // Assume it's a username
+        linkedinUrl = `https://linkedin.com/in/${linkedinText}`;
+        displayText = `linkedin.com/in/${linkedinText}`;
+      }
+    }
+
+    contactChildren.push(
+      new ExternalHyperlink({
+        children: [
+          new TextRun({
+            text: displayText,
+            size: FONT_SIZES.body,
+            color: COLORS.primary,
+            font: "Calibri",
+            underline: {
+              type: UnderlineType.SINGLE,
+            },
+          }),
+        ],
+        link: linkedinUrl,
       })
     );
   }
 
   // GitHub - only if detected in original resume
   if (
-    resumeData.source_content_analysis.has_github &&
-    resumeData.contact_information.github?.trim()
+    resumeData.source_content_analysis?.has_github &&
+    resumeData.contact_information?.github?.trim()
   ) {
-    if (contactParts.length > 0) {
-      contactParts.push(
+    if (contactChildren.length > 0) {
+      contactChildren.push(
         new TextRun({
           text: " • ",
           size: FONT_SIZES.body,
@@ -262,23 +330,49 @@ export function generateModernResumeDocx(
         })
       );
     }
-    contactParts.push(
-      new TextRun({
-        text: "GitHub",
-        size: FONT_SIZES.body,
-        color: COLORS.primary,
-        font: "Calibri",
+
+    const githubText = resumeData.contact_information.github;
+    let githubUrl = githubText;
+    let displayText = githubText;
+
+    // Handle different GitHub formats
+    if (!githubText.startsWith("http")) {
+      if (githubText.includes("github.com/")) {
+        githubUrl = `https://${githubText}`;
+      } else if (githubText.startsWith("github.com/")) {
+        githubUrl = `https://${githubText}`;
+      } else {
+        // Assume it's a username
+        githubUrl = `https://github.com/${githubText}`;
+        displayText = `github.com/${githubText}`;
+      }
+    }
+
+    contactChildren.push(
+      new ExternalHyperlink({
+        children: [
+          new TextRun({
+            text: displayText,
+            size: FONT_SIZES.body,
+            color: COLORS.primary,
+            font: "Calibri",
+            underline: {
+              type: UnderlineType.SINGLE,
+            },
+          }),
+        ],
+        link: githubUrl,
       })
     );
   }
 
   // Website/Portfolio - only if social links detected in original resume
   if (
-    resumeData.source_content_analysis.has_social_links &&
-    resumeData.contact_information.website?.trim()
+    resumeData.source_content_analysis?.has_social_links &&
+    resumeData.contact_information?.website?.trim()
   ) {
-    if (contactParts.length > 0) {
-      contactParts.push(
+    if (contactChildren.length > 0) {
+      contactChildren.push(
         new TextRun({
           text: " • ",
           size: FONT_SIZES.body,
@@ -287,23 +381,104 @@ export function generateModernResumeDocx(
         })
       );
     }
-    contactParts.push(
-      new TextRun({
-        text: "Portfolio",
-        size: FONT_SIZES.body,
-        color: COLORS.primary,
-        font: "Calibri",
+
+    const websiteText = resumeData.contact_information.website;
+    let websiteUrl = websiteText;
+
+    // Ensure URL has protocol
+    if (
+      !websiteText.startsWith("http://") &&
+      !websiteText.startsWith("https://")
+    ) {
+      websiteUrl = `https://${websiteText}`;
+    }
+
+    contactChildren.push(
+      new ExternalHyperlink({
+        children: [
+          new TextRun({
+            text: websiteText,
+            size: FONT_SIZES.body,
+            color: COLORS.primary,
+            font: "Calibri",
+            underline: {
+              type: UnderlineType.SINGLE,
+            },
+          }),
+        ],
+        link: websiteUrl,
       })
     );
   }
 
+  // Additional Social Links - only if social links detected in original resume
+  if (
+    resumeData.source_content_analysis?.has_social_links &&
+    resumeData.contact_information?.social_links
+  ) {
+    resumeData.contact_information.social_links.forEach((link) => {
+      if (link.platform && link.url) {
+        if (contactChildren.length > 0) {
+          contactChildren.push(
+            new TextRun({
+              text: " • ",
+              size: FONT_SIZES.body,
+              color: COLORS.secondary,
+              font: "Calibri",
+            })
+          );
+        }
+
+        let linkUrl = link.url;
+
+        // Ensure URL has protocol if it looks like a URL
+        if (
+          isLikelyUrl(link.url) &&
+          !link.url.startsWith("http://") &&
+          !link.url.startsWith("https://")
+        ) {
+          linkUrl = `https://${link.url}`;
+        }
+
+        if (isLikelyUrl(link.url)) {
+          contactChildren.push(
+            new ExternalHyperlink({
+              children: [
+                new TextRun({
+                  text: link.url,
+                  size: FONT_SIZES.body,
+                  color: COLORS.primary,
+                  font: "Calibri",
+                  underline: {
+                    type: UnderlineType.SINGLE,
+                  },
+                }),
+              ],
+              link: linkUrl,
+            })
+          );
+        } else {
+          // If it's not a URL, display as plain text
+          contactChildren.push(
+            new TextRun({
+              text: `${link.platform}: ${link.url}`,
+              size: FONT_SIZES.body,
+              color: COLORS.primary,
+              font: "Calibri",
+            })
+          );
+        }
+      }
+    });
+  }
+
   // Relocation willingness - only if mentioned in original resume
   if (
-    resumeData.source_content_analysis.has_relocation_willingness &&
-    resumeData.contact_information.willing_to_relocate
+    resumeData.source_content_analysis?.has_relocation_willingness &&
+    resumeData.contact_information?.willing_to_relocate
   ) {
-    if (contactParts.length > 0) {
-      contactParts.push(
+    if (contactChildren.length > 0) {
+      contactChildren.push(
         new TextRun({
           text: " • ",
           size: FONT_SIZES.body,
@@ -312,7 +487,7 @@ export function generateModernResumeDocx(
         })
       );
     }
-    contactParts.push(
+    contactChildren.push(
       new TextRun({
         text: "Open to relocation",
         size: FONT_SIZES.body,
@@ -324,10 +499,10 @@ export function generateModernResumeDocx(
   }
 
   // Add contact information paragraph only if we have contact parts
-  if (contactParts.length > 0) {
+  if (contactChildren.length > 0) {
     children.push(
       new Paragraph({
-        children: contactParts,
+        children: contactChildren,
         alignment: AlignmentType.CENTER,
         spacing: { after: 300 },
       })
@@ -359,7 +534,7 @@ export function generateModernResumeDocx(
 
   // Skills Section - only if detected in original resume
   if (
-    resumeData.source_content_analysis.has_skills &&
+    resumeData.source_content_analysis?.has_skills &&
     resumeData.skills &&
     resumeData.skills.length > 0
   ) {
@@ -388,7 +563,7 @@ export function generateModernResumeDocx(
 
   // Work Experience Section - only if detected in original resume
   if (
-    resumeData.source_content_analysis.has_work_experience &&
+    resumeData.source_content_analysis?.has_work_experience &&
     resumeData.work_experience &&
     resumeData.work_experience.length > 0
   ) {
@@ -553,7 +728,7 @@ export function generateModernResumeDocx(
 
   // Education Section - only if data exists AND detected in original resume
   if (
-    resumeData.source_content_analysis.has_education &&
+    resumeData.source_content_analysis?.has_education &&
     resumeData.education &&
     resumeData.education.length > 0
   ) {
@@ -658,7 +833,7 @@ export function generateModernResumeDocx(
 
   // Certifications Section - only if data exists and detected in original resume
   if (
-    resumeData.source_content_analysis.has_certifications &&
+    resumeData.source_content_analysis?.has_certifications &&
     resumeData.certifications &&
     resumeData.certifications.length > 0
   ) {
@@ -674,6 +849,19 @@ export function generateModernResumeDocx(
       children.push(createSectionHeader("CERTIFICATIONS"));
 
       validCertifications.forEach((cert) => {
+        const certChildren: (TextRun | ExternalHyperlink)[] = [];
+
+        // Bullet point
+        certChildren.push(
+          new TextRun({
+            text: "• ",
+            size: FONT_SIZES.body,
+            color: COLORS.primary,
+            font: "Calibri",
+            bold: true,
+          })
+        );
+
         // Build certification text dynamically based on available fields
         const certParts: string[] = [];
 
@@ -690,23 +878,57 @@ export function generateModernResumeDocx(
         }
 
         if (certParts.length > 0) {
-          children.push(
-            new Paragraph({
+          certChildren.push(
+            new TextRun({
+              text: certParts.join(" - "),
+              size: FONT_SIZES.body,
+              color: COLORS.text,
+              font: "Calibri",
+            })
+          );
+        }
+
+        // Add credential URL if available - make it clickable
+        if (cert.has_credential_url && cert.credential_url?.trim()) {
+          certChildren.push(
+            new TextRun({
+              text: " - ",
+              size: FONT_SIZES.body,
+              color: COLORS.text,
+              font: "Calibri",
+            })
+          );
+
+          let credentialUrl = cert.credential_url;
+          if (
+            !cert.credential_url.startsWith("http://") &&
+            !cert.credential_url.startsWith("https://")
+          ) {
+            credentialUrl = `https://${cert.credential_url}`;
+          }
+
+          certChildren.push(
+            new ExternalHyperlink({
               children: [
                 new TextRun({
-                  text: "• ",
+                  text: "View Credential",
                   size: FONT_SIZES.body,
                   color: COLORS.primary,
                   font: "Calibri",
-                  bold: true,
-                }),
-                new TextRun({
-                  text: certParts.join(" - "),
-                  size: FONT_SIZES.body,
-                  color: COLORS.text,
-                  font: "Calibri",
+                  underline: {
+                    type: UnderlineType.SINGLE,
+                  },
                 }),
               ],
+              link: credentialUrl,
+            })
+          );
+        }
+
+        if (certChildren.length > 1) {
+          children.push(
+            new Paragraph({
+              children: certChildren,
               spacing: { after: 100 },
               indent: {
                 left: convertInchesToTwip(0.3),
@@ -728,7 +950,7 @@ export function generateModernResumeDocx(
 
   // Projects Section - only if data exists and detected in original resume
   if (
-    resumeData.source_content_analysis.has_projects &&
+    resumeData.source_content_analysis?.has_projects &&
     resumeData.projects &&
     resumeData.projects.length > 0
   ) {
@@ -743,10 +965,10 @@ export function generateModernResumeDocx(
       children.push(createSectionHeader("KEY PROJECTS"));
 
       validProjects.forEach((project) => {
-        const projectParts: TextRun[] = [];
+        const projectChildren: (TextRun | ExternalHyperlink)[] = [];
 
         // Bullet point
-        projectParts.push(
+        projectChildren.push(
           new TextRun({
             text: "• ",
             size: FONT_SIZES.body,
@@ -758,7 +980,7 @@ export function generateModernResumeDocx(
 
         // Project title - only if available
         if (project.has_title && project.title?.trim()) {
-          projectParts.push(
+          projectChildren.push(
             new TextRun({
               text: `${project.title}`,
               size: FONT_SIZES.body,
@@ -770,7 +992,7 @@ export function generateModernResumeDocx(
 
           // Add separator if we also have description
           if (project.has_description && project.description?.trim()) {
-            projectParts.push(
+            projectChildren.push(
               new TextRun({
                 text: ": ",
                 size: FONT_SIZES.body,
@@ -784,7 +1006,7 @@ export function generateModernResumeDocx(
 
         // Project description - only if available
         if (project.has_description && project.description?.trim()) {
-          projectParts.push(
+          projectChildren.push(
             new TextRun({
               text: project.description,
               size: FONT_SIZES.body,
@@ -794,11 +1016,57 @@ export function generateModernResumeDocx(
           );
         }
 
-        if (projectParts.length > 1) {
+        // Project URL - only if available, make it clickable
+        if (project.has_url && project.url?.trim()) {
+          projectChildren.push(
+            new TextRun({
+              text: " (",
+              size: FONT_SIZES.body,
+              color: COLORS.text,
+              font: "Calibri",
+            })
+          );
+
+          let projectUrl = project.url;
+          if (
+            !project.url.startsWith("http://") &&
+            !project.url.startsWith("https://")
+          ) {
+            projectUrl = `https://${project.url}`;
+          }
+
+          projectChildren.push(
+            new ExternalHyperlink({
+              children: [
+                new TextRun({
+                  text: project.url,
+                  size: FONT_SIZES.body,
+                  color: COLORS.primary,
+                  font: "Calibri",
+                  underline: {
+                    type: UnderlineType.SINGLE,
+                  },
+                }),
+              ],
+              link: projectUrl,
+            })
+          );
+
+          projectChildren.push(
+            new TextRun({
+              text: ")",
+              size: FONT_SIZES.body,
+              color: COLORS.text,
+              font: "Calibri",
+            })
+          );
+        }
+
+        if (projectChildren.length > 1) {
           // More than just the bullet
           children.push(
             new Paragraph({
-              children: projectParts,
+              children: projectChildren,
               spacing: { after: 100 },
               indent: {
                 left: convertInchesToTwip(0.3),
@@ -820,7 +1088,7 @@ export function generateModernResumeDocx(
 
   // Languages Section - only if data exists and detected in original resume
   if (
-    resumeData.source_content_analysis.has_languages &&
+    resumeData.source_content_analysis?.has_languages &&
     resumeData.languages &&
     resumeData.languages.length > 0
   ) {
@@ -911,7 +1179,7 @@ export function generateModernResumeDocx(
 
   // Awards Section - only if data exists and detected in original resume
   if (
-    resumeData.source_content_analysis.has_awards &&
+    resumeData.source_content_analysis?.has_awards &&
     resumeData.awards &&
     resumeData.awards.length > 0
   ) {

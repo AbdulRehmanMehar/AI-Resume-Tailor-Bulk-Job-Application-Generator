@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import "@/styles/docx-preview.css";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,12 +30,6 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
@@ -44,7 +38,6 @@ import {
   downloadTailoredResume,
   generateModernResumeDocx,
 } from "@/lib/modern-resume-generator";
-import { renderAsync } from "docx-preview";
 
 interface JobRow {
   id: string;
@@ -84,19 +77,45 @@ export function BulkJobGenerator({
   const [includeDescriptions, setIncludeDescriptions] = useState(false);
   const [isUploadingExcel, setIsUploadingExcel] = useState(false);
   const [isGeneratingResumes, setIsGeneratingResumes] = useState(false);
-  const [generatedResumes, setGeneratedResumes] = useState<{
-    [key: string]: any;
-  }>({});
-
-  // Preview modal state
-  const [previewModalOpen, setPreviewModalOpen] = useState(false);
-  const [previewJobId, setPreviewJobId] = useState<string | null>(null);
-  const [previewUrls, setPreviewUrls] = useState<{
-    oldResume: string | null;
-    newResume: string | null;
-  }>({ oldResume: null, newResume: null });
 
   const { toast } = useToast();
+  const router = useRouter();
+
+  // Load saved data from localStorage on component mount
+  useEffect(() => {
+    const savedData = localStorage.getItem("resumeGenerationData");
+    if (savedData) {
+      try {
+        const data = JSON.parse(savedData);
+        if (data.jobs && Array.isArray(data.jobs)) {
+          setJobs(data.jobs);
+        }
+        if (data.baseResumeContent) {
+          setBaseResumeContent(data.baseResumeContent);
+        }
+        if (data.yearsOfExperience) {
+          setYearsOfExperience(data.yearsOfExperience);
+        }
+        if (data.language) {
+          setLanguage(data.language);
+        }
+      } catch (error) {
+        console.warn("Failed to load saved data:", error);
+      }
+    }
+  }, []);
+
+  // Save current state to localStorage whenever it changes
+  useEffect(() => {
+    const dataToSave = {
+      jobs,
+      baseResumeContent,
+      yearsOfExperience,
+      language,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem("resumeGenerationData", JSON.stringify(dataToSave));
+  }, [jobs, baseResumeContent, yearsOfExperience, language]);
 
   // Utility function to extract text from PDF files
   const extractTextFromPDF = async (file: File): Promise<string> => {
@@ -414,99 +433,6 @@ export function BulkJobGenerator({
     }
   };
 
-  // Effect to render DOCX files when preview URLs change
-  useEffect(() => {
-    const renderDocxFiles = async () => {
-      if (previewModalOpen && previewUrls.newResume) {
-        try {
-          // Render the new tailored resume
-          const newResumeContainer =
-            document.getElementById("new-resume-preview");
-          if (newResumeContainer) {
-            newResumeContainer.innerHTML =
-              '<div class="text-center p-4"><div class="animate-spin inline-block w-6 h-6 border-[3px] border-current border-t-transparent rounded-full text-blue-600" role="status"><span class="sr-only">Loading...</span></div><p class="mt-2 text-sm text-gray-600">Rendering resume...</p></div>';
-
-            const newResumeResponse = await fetch(previewUrls.newResume);
-            const newResumeArrayBuffer = await newResumeResponse.arrayBuffer();
-
-            // Clear the loading state and render
-            newResumeContainer.innerHTML = "";
-            await renderAsync(
-              newResumeArrayBuffer,
-              newResumeContainer,
-              undefined,
-              {
-                className: "docx-content",
-                inWrapper: false,
-                ignoreWidth: false,
-                ignoreHeight: false,
-                ignoreFonts: false,
-                breakPages: false,
-                ignoreLastRenderedPageBreak: true,
-                experimental: false,
-                trimXmlDeclaration: true,
-              }
-            );
-          }
-
-          // Render the old resume if available
-          if (previewUrls.oldResume) {
-            const oldResumeContainer =
-              document.getElementById("old-resume-preview");
-            if (oldResumeContainer) {
-              oldResumeContainer.innerHTML =
-                '<div class="text-center p-4"><div class="animate-spin inline-block w-6 h-6 border-[3px] border-current border-t-transparent rounded-full text-blue-600" role="status"><span class="sr-only">Loading...</span></div><p class="mt-2 text-sm text-gray-600">Rendering resume...</p></div>';
-
-              const oldResumeResponse = await fetch(previewUrls.oldResume);
-              const oldResumeArrayBuffer =
-                await oldResumeResponse.arrayBuffer();
-
-              // Clear the loading state and render
-              oldResumeContainer.innerHTML = "";
-              await renderAsync(
-                oldResumeArrayBuffer,
-                oldResumeContainer,
-                undefined,
-                {
-                  className: "docx-content",
-                  inWrapper: false,
-                  ignoreWidth: false,
-                  ignoreHeight: false,
-                  ignoreFonts: false,
-                  breakPages: false,
-                  ignoreLastRenderedPageBreak: true,
-                  experimental: false,
-                  trimXmlDeclaration: true,
-                }
-              );
-            }
-          }
-        } catch (error) {
-          console.error("Error rendering DOCX files:", error);
-          // Show error in containers
-          const newResumeContainer =
-            document.getElementById("new-resume-preview");
-          const oldResumeContainer =
-            document.getElementById("old-resume-preview");
-
-          if (newResumeContainer) {
-            newResumeContainer.innerHTML =
-              '<div class="text-center p-4 text-red-600"><p>Failed to render resume</p></div>';
-          }
-          if (oldResumeContainer && previewUrls.oldResume) {
-            oldResumeContainer.innerHTML =
-              '<div class="text-center p-4 text-red-600"><p>Failed to render resume</p></div>';
-          }
-        }
-      }
-    };
-
-    if (previewModalOpen) {
-      // Small delay to ensure DOM elements are ready
-      setTimeout(renderDocxFiles, 200);
-    }
-  }, [previewModalOpen, previewUrls]);
-
   // URL validation function
   const isValidUrl = (url: string): boolean => {
     if (!url || url.trim() === "") return false;
@@ -562,6 +488,29 @@ export function BulkJobGenerator({
       const extractedText = await extractTextFromFile(file);
       setBaseResumeContent(extractedText);
 
+      // Store the original file in localStorage for preview purposes
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const fileData = {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          lastModified: file.lastModified,
+          content: e.target?.result as string, // This will be a data URL (base64)
+        };
+
+        try {
+          localStorage.setItem("uploadedResumeFile", JSON.stringify(fileData));
+          console.log("Resume file stored in localStorage for preview");
+        } catch (storageError) {
+          console.warn(
+            "Failed to store file in localStorage (possibly too large):",
+            storageError
+          );
+        }
+      };
+      reader.readAsDataURL(file); // Convert file to base64 data URL
+
       toast({
         title: "Resume uploaded successfully",
         description: `Extracted text from ${file.name}`,
@@ -613,33 +562,67 @@ export function BulkJobGenerator({
         return;
       }
 
-      // Map Excel data to job rows
+      // Debug: Log the first row to see available columns
+      console.log("Excel file columns found:", Object.keys(jsonData[0] || {}));
+      console.log("First row data:", jsonData[0]);
+
+      // More flexible column mapping - try multiple variations
+      const getColumnValue = (row: any, possibleNames: string[]): string => {
+        for (const name of possibleNames) {
+          if (row[name] !== undefined && row[name] !== null) {
+            return String(row[name]).trim();
+          }
+        }
+        return "";
+      };
+
+      // Map Excel data to job rows with more flexible column names
       const newJobs: JobRow[] = jsonData.slice(0, 100).map((row, index) => ({
         id: (Date.now() + index).toString(),
-        companyUrl:
-          row["Company URL"] ||
-          row["companyUrl"] ||
-          row["url"] ||
-          row["Company"] ||
-          "",
-        jobTitle:
-          row["Job Title"] ||
-          row["jobTitle"] ||
-          row["title"] ||
-          row["Title"] ||
-          "",
-        description:
-          row["Description"] ||
-          row["description"] ||
-          row["Job Description"] ||
-          row["jobDescription"] ||
-          "",
-        skills:
-          row["Skills"] ||
-          row["skills"] ||
-          row["Required Skills"] ||
-          row["requiredSkills"] ||
-          "",
+        companyUrl: getColumnValue(row, [
+          "Company URL",
+          "companyUrl",
+          "company_url",
+          "Company_URL",
+          "url",
+          "URL",
+          "Company",
+          "company",
+          "Website",
+          "website",
+        ]),
+        jobTitle: getColumnValue(row, [
+          "Job Title",
+          "jobTitle",
+          "job_title",
+          "Job_Title",
+          "title",
+          "Title",
+          "Position",
+          "position",
+          "Role",
+          "role",
+        ]),
+        description: getColumnValue(row, [
+          "Description",
+          "description",
+          "Job Description",
+          "jobDescription",
+          "job_description",
+          "Job_Description",
+          "desc",
+          "Desc",
+        ]),
+        skills: getColumnValue(row, [
+          "Skills",
+          "skills",
+          "Required Skills",
+          "requiredSkills",
+          "required_skills",
+          "Required_Skills",
+          "skill",
+          "Skill",
+        ]),
       }));
 
       // Filter out completely empty rows
@@ -652,14 +635,22 @@ export function BulkJobGenerator({
       );
 
       if (validJobs.length === 0) {
+        const availableColumns = Object.keys(jsonData[0] || {}).join(", ");
         setError(
-          'No valid job data found in Excel file. Please ensure columns are named: "Company URL", "Job Title", "Description", "Skills"'
+          `No valid job data found in Excel file. Available columns: ${availableColumns}. Please ensure columns include variations of: "Company URL", "Job Title", "Description", "Skills"`
         );
         return;
       }
 
+      console.log("Successfully mapped jobs:", validJobs);
       setJobs(validJobs);
       setError(null);
+
+      toast({
+        title: "Excel File Uploaded",
+        description: `Successfully imported ${validJobs.length} job row(s)`,
+        variant: "default",
+      });
 
       // Clear the file input
       event.target.value = "";
@@ -1313,238 +1304,94 @@ export function BulkJobGenerator({
       return;
     }
 
-    setIsGeneratingResumes(true);
-    setError(null);
-    setRowErrors({});
-
-    try {
-      // Get valid jobs with complete data
-      const validJobs = jobs.filter((job) => {
-        if (!isValidUrl(job.companyUrl)) {
-          setRowError(job.id, "Invalid or missing company URL");
-          return false;
-        }
-        if (!job.jobTitle || job.jobTitle.trim() === "") {
-          setRowError(job.id, "Missing job title");
-          return false;
-        }
-        if (!job.description || job.description.trim() === "") {
-          setRowError(job.id, "Missing job description");
-          return false;
-        }
-        return true;
-      });
-
-      if (validJobs.length === 0) {
-        setError(
-          "No valid job rows found. Please ensure each row has a company URL, job title, and description."
-        );
-        setIsGeneratingResumes(false);
-        return;
-      }
-
-      const additionalContext = `Years of experience: ${yearsOfExperience}, Language: ${language}`;
-
-      // Generate resumes in parallel for better performance
-      const promises = validJobs.map(async (job) => {
-        try {
-          const response = await fetch("/api/generate-tailored-resume", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              job_title: job.jobTitle,
-              job_description: job.description,
-              resumeText: baseResumeContent,
-              additional_context: additionalContext,
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error(`Failed to generate resume for ${job.companyUrl}`);
-          }
-
-          const data = await response.json();
-          return {
-            jobId: job.id,
-            success: true,
-            resume: data.data.tailored_resume,
-            metadata: data.data.metadata,
-          };
-        } catch (err) {
-          return {
-            jobId: job.id,
-            success: false,
-            error: err instanceof Error ? err.message : "Unknown error",
-          };
-        }
-      });
-
-      const results = await Promise.all(promises);
-
-      // Process results
-      const newGeneratedResumes: { [key: string]: any } = {};
-      let successCount = 0;
-      let errorCount = 0;
-
-      results.forEach((result) => {
-        if (result.success) {
-          newGeneratedResumes[result.jobId] = result.resume;
-          clearRowError(result.jobId);
-          successCount++;
-        } else {
-          setRowError(result.jobId, result.error || "Resume generation failed");
-          errorCount++;
-        }
-      });
-
-      setGeneratedResumes((prev) => ({ ...prev, ...newGeneratedResumes }));
-
-      // Show success toast
-      toast({
-        title: "Resume Generation Complete",
-        description: `Successfully generated ${successCount} tailored resume${
-          successCount !== 1 ? "s" : ""
-        }${errorCount > 0 ? ` (${errorCount} failed)` : ""}.`,
-        variant: "default",
-      });
-    } catch (err: any) {
-      console.error("Error generating tailored resumes:", err);
-      setError(
-        "Failed to generate tailored resumes: " +
-          (err.message || "Unknown error")
+    // Get valid jobs with complete data
+    const validJobs = jobs.filter((job) => {
+      return (
+        isValidUrl(job.companyUrl) &&
+        job.jobTitle &&
+        job.jobTitle.trim() !== "" &&
+        job.description &&
+        job.description.trim() !== ""
       );
-    } finally {
-      setIsGeneratingResumes(false);
-    }
-  };
+    });
 
-  // Download tailored resume for a specific job
-  const downloadResumeForJob = async (jobId: string) => {
-    const resume = generatedResumes[jobId];
-    const job = jobs.find((j) => j.id === jobId);
-
-    if (!resume || !job) {
+    if (validJobs.length === 0) {
       toast({
-        title: "Resume Not Found",
-        description: "Please generate the resume first before downloading.",
+        title: "No Valid Jobs",
+        description:
+          "Please ensure each row has a company URL, job title, and description.",
         variant: "destructive",
       });
       return;
     }
 
-    try {
-      const fileName = `${resume.full_name.replace(
-        /\s+/g,
-        "_"
-      )}_${job.jobTitle.replace(/\s+/g, "_")}_Resume.docx`;
-      await downloadTailoredResume(resume, fileName);
+    // Save comprehensive data to localStorage with validation
+    const resumeGenerationData = {
+      jobs: validJobs.map((job) => ({
+        ...job,
+        // Ensure all necessary fields are present
+        companyUrl: job.companyUrl || "",
+        description: job.description || "",
+        skills: job.skills || "",
+        company: job.companyUrl ? extractCompanyFromUrl(job.companyUrl) : "",
+      })),
+      baseResumeContent,
+      yearsOfExperience,
+      language,
+      timestamp: Date.now(),
+      // Add metadata for debugging
+      totalJobs: validJobs.length,
+      hasBaseResume: !!baseResumeContent,
+      resumeContentLength: baseResumeContent ? baseResumeContent.length : 0,
+      // Add information about uploaded file
+      hasUploadedFile: !!localStorage.getItem("uploadedResumeFile"),
+    };
 
-      toast({
-        title: "Download Started",
-        description: `Resume for ${job.jobTitle} is being downloaded.`,
-        variant: "default",
-      });
-    } catch (error: any) {
-      console.error("Error downloading resume:", error);
-      toast({
-        title: "Download Failed",
-        description: "Failed to download resume. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Download all generated resumes as a zip file
-  const downloadAllResumes = async () => {
-    const resumesToDownload = Object.keys(generatedResumes);
-
-    if (resumesToDownload.length === 0) {
-      toast({
-        title: "No Resumes to Download",
-        description: "Please generate some resumes first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Download each resume individually (could be enhanced to create a zip in the future)
-    let downloadCount = 0;
-    for (const jobId of resumesToDownload) {
+    // Helper function to extract company name from URL
+    function extractCompanyFromUrl(url: string): string {
       try {
-        await downloadResumeForJob(jobId);
-        downloadCount++;
-      } catch (error) {
-        console.error(`Failed to download resume for job ${jobId}:`, error);
+        const domain = url
+          .replace(/^https?:\/\//, "")
+          .replace(/^www\./, "")
+          .split(".")[0];
+        return domain.charAt(0).toUpperCase() + domain.slice(1);
+      } catch {
+        return "";
       }
     }
 
-    if (downloadCount > 0) {
-      toast({
-        title: "Bulk Download Complete",
-        description: `Started downloading ${downloadCount} resume${
-          downloadCount !== 1 ? "s" : ""
-        }.`,
-        variant: "default",
-      });
-    }
-  };
+    console.log("Saving resume generation data:", {
+      jobCount: resumeGenerationData.jobs.length,
+      hasBaseResume: resumeGenerationData.hasBaseResume,
+      resumeLength: resumeGenerationData.resumeContentLength,
+    });
 
-  // Preview tailored resume for a specific job
-  const previewResumeForJob = async (jobId: string) => {
-    const resume = generatedResumes[jobId];
-    const job = jobs.find((j) => j.id === jobId);
+    localStorage.setItem(
+      "resumeGenerationData",
+      JSON.stringify(resumeGenerationData)
+    );
 
-    if (!resume || !job) {
-      toast({
-        title: "Resume Not Found",
-        description: "Please generate the resume first before previewing.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Also save a backup with timestamp for recovery
+    localStorage.setItem(
+      `resumeGenerationData_backup_${Date.now()}`,
+      JSON.stringify(resumeGenerationData)
+    );
 
+    // Clean up old backups (keep only last 3)
     try {
-      setPreviewJobId(jobId);
-      setPreviewModalOpen(true);
+      const allKeys = Object.keys(localStorage);
+      const backupKeys = allKeys
+        .filter((key) => key.startsWith("resumeGenerationData_backup_"))
+        .sort()
+        .slice(0, -3);
 
-      // Generate DOCX for the new tailored resume
-      const newResumeDoc = generateModernResumeDocx(resume);
-
-      // Convert to blob using Packer
-      const { Packer } = await import("docx");
-      const newResumeBlob = await Packer.toBlob(newResumeDoc);
-
-      // Set preview URLs
-      setPreviewUrls({
-        oldResume: baseResume ? URL.createObjectURL(baseResume) : null,
-        newResume: URL.createObjectURL(newResumeBlob),
-      });
-    } catch (error: any) {
-      console.error("Error creating preview:", error);
-      toast({
-        title: "Preview Failed",
-        description: "Failed to create resume preview. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Close preview modal and cleanup URLs
-  const closePreviewModal = () => {
-    setPreviewModalOpen(false);
-    setPreviewJobId(null);
-
-    // Cleanup blob URLs to prevent memory leaks
-    if (previewUrls.oldResume) {
-      URL.revokeObjectURL(previewUrls.oldResume);
-    }
-    if (previewUrls.newResume) {
-      URL.revokeObjectURL(previewUrls.newResume);
+      backupKeys.forEach((key) => localStorage.removeItem(key));
+    } catch (error) {
+      console.warn("Error cleaning up old backups:", error);
     }
 
-    setPreviewUrls({ oldResume: null, newResume: null });
+    // Navigate to resume generation page
+    router.push("/resume-generation");
   };
 
   return (
@@ -1573,196 +1420,148 @@ export function BulkJobGenerator({
           </p>
         </CardHeader>
         <CardContent className="space-y-8 p-8">
-          {/* Base Resume Upload */}
-          <div className="bg-blue-50 rounded-xl p-6 border-2 border-dashed border-blue-200">
+          {/* File Upload Section */}
+          <div className="bg-gradient-to-br from-blue-50 to-green-50 rounded-xl p-6 border-2 border-dashed border-blue-200">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <FileText className="h-5 w-5 text-blue-600" />
-              Base Resume Upload
+              File Upload
             </h3>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <input
-                  type="file"
-                  id="resume-upload"
-                  accept=".pdf,.docx,.txt"
-                  onChange={handleResumeUpload}
-                  className="hidden"
-                />
-                <Button
-                  onClick={() =>
-                    document.getElementById("resume-upload")?.click()
-                  }
-                  variant="outline"
-                  className="border-blue-300 text-blue-700 hover:bg-blue-100"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Upload Resume
-                </Button>
-                {baseResume && (
-                  <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-1 rounded-full">
-                    <FileText className="h-4 w-4" />
-                    {baseResume.name}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Base Resume Upload */}
+              <div className="space-y-4">
+                <h4 className="font-medium text-blue-700 flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Base Resume
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="file"
+                      id="resume-upload"
+                      accept=".pdf,.docx,.txt"
+                      onChange={handleResumeUpload}
+                      className="hidden"
+                    />
+                    <Button
+                      onClick={() =>
+                        document.getElementById("resume-upload")?.click()
+                      }
+                      variant="outline"
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Upload Resume
+                    </Button>
+                    {baseResume && (
+                      <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-1 rounded-full">
+                        <FileText className="h-4 w-4" />
+                        {baseResume.name}
+                      </div>
+                    )}
                   </div>
-                )}
+                  <p className="text-sm text-blue-600">
+                    Upload your base resume to provide context for better job
+                    generation. Supports PDF, DOCX, and text files.
+                  </p>
+                </div>
               </div>
-              <p className="text-sm text-blue-600">
-                Upload your base resume to provide context for better job
-                generation. Supports PDF, DOCX, and text files. Legacy DOC files
-                are not supported.
-              </p>
+
+              {/* Excel Upload */}
+              <div className="space-y-4">
+                <h4 className="font-medium text-green-700 flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  Excel Data
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="file"
+                      id="excel-upload"
+                      accept=".xlsx,.xls"
+                      onChange={handleExcelUpload}
+                      className="hidden"
+                    />
+                    <Button
+                      onClick={() =>
+                        document.getElementById("excel-upload")?.click()
+                      }
+                      variant="outline"
+                      className="border-green-300 text-green-700 hover:bg-green-100"
+                      disabled={isUploadingExcel}
+                    >
+                      {isUploadingExcel ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="mr-2 h-4 w-4" />
+                      )}
+                      Upload Excel
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const link = document.createElement("a");
+                        link.href = "/sample-jobs.xlsx";
+                        link.download = "sample-jobs.xlsx";
+                        link.click();
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="border-green-300 text-green-700 hover:bg-green-100"
+                    >
+                      Download Sample
+                    </Button>
+                  </div>
+                  <p className="text-sm text-green-600">
+                    Upload an Excel file to pre-fill job rows. Expected columns:
+                    "Company URL" (required), "Job Title", "Description",
+                    "Skills". Download the sample file to see the exact format.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Excel Upload Section */}
-          <div className="bg-green-50 rounded-xl p-6 border-2 border-dashed border-green-200">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Upload className="h-5 w-5 text-green-600" />
-              Excel Upload
-            </h3>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <input
-                  type="file"
-                  id="excel-upload"
-                  accept=".xlsx,.xls"
-                  onChange={handleExcelUpload}
-                  className="hidden"
-                />
+          {/* Job Table */}
+          <div className="space-y-4">
+            {/* Compact Action Toolbar */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                {/* Include Descriptions Checkbox */}
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="include-descriptions"
+                    checked={includeDescriptions}
+                    onCheckedChange={(checked) =>
+                      setIncludeDescriptions(checked === true)
+                    }
+                  />
+                  <Label
+                    htmlFor="include-descriptions"
+                    className="text-sm font-medium leading-none"
+                  >
+                    Include Descriptions
+                  </Label>
+                </div>
+
+                {/* Generate All Button */}
                 <Button
-                  onClick={() =>
-                    document.getElementById("excel-upload")?.click()
-                  }
-                  variant="outline"
-                  className="border-green-300 text-green-700 hover:bg-green-100"
-                  disabled={isUploadingExcel}
-                >
-                  {isUploadingExcel ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="mr-2 h-4 w-4" />
-                  )}
-                  Upload Excel File
-                </Button>
-                <Button
-                  onClick={() => {
-                    const link = document.createElement("a");
-                    link.href = "/sample-jobs.xlsx";
-                    link.download = "sample-jobs.xlsx";
-                    link.click();
-                  }}
-                  variant="outline"
+                  onClick={generateAllValidRows}
+                  disabled={isGenerating !== null || bulkGenerating !== null}
+                  className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white border-0 shadow-sm hover:shadow-md transition-all"
                   size="sm"
-                  className="border-green-300 text-green-700 hover:bg-green-100"
                 >
-                  Download Sample
+                  {bulkGenerating === "all-fields" ? (
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-3 w-3" />
+                  )}
+                  Generate All (
+                  {jobs.filter((job) => isValidUrl(job.companyUrl)).length})
                 </Button>
               </div>
-              <p className="text-sm text-green-600">
-                Upload an Excel file to pre-fill job rows. Ensure columns are
-                named: "Company URL", "Job Title", "Description", "Skills".
-              </p>
-            </div>
-          </div>
 
-          {/* AI Generation Controls */}
-          <div className="bg-gray-50 rounded-xl p-6 border-2 border-dashed border-gray-200">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Brain className="h-5 w-5 text-purple-600" />
-              AI Generation Tools
-            </h3>
-
-            {/* Generate All Valid Rows Button */}
-            <div className="mb-6">
-              {/* Include Descriptions Checkbox */}
-              <div className="flex items-center space-x-2 mb-4">
-                <Checkbox
-                  id="include-descriptions"
-                  checked={includeDescriptions}
-                  onCheckedChange={(checked) =>
-                    setIncludeDescriptions(checked === true)
-                  }
-                />
-                <Label
-                  htmlFor="include-descriptions"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Include Descriptions Generation
-                </Label>
-              </div>
-
-              <Button
-                onClick={generateAllValidRows}
-                disabled={isGenerating !== null || bulkGenerating !== null}
-                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white border-0 shadow-md hover:shadow-lg transition-all"
-                size="lg"
-              >
-                {bulkGenerating === "all-fields" ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
-                )}
-                Generate All Valid Rows (
-                {jobs.filter((job) => isValidUrl(job.companyUrl)).length})
-              </Button>
-              <p className="text-sm text-gray-600 mt-2">
-                Generate titles{includeDescriptions ? ", descriptions," : ""}{" "}
-                and skills for all rows with valid company URLs.
-                {getExistingJobTitles().length > 0 && (
-                  <span className="text-blue-600">
-                    {" "}
-                    Will maintain consistency with existing job titles.
-                  </span>
-                )}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 !hidden">
-              <Button
-                onClick={generateAllTitles}
-                disabled={isGenerating !== null || bulkGenerating !== null}
-                className="bg-blue-500 hover:bg-blue-600 text-white border-0 shadow-md hover:shadow-lg transition-all !hidden"
-                size="lg"
-              >
-                {bulkGenerating === "titles" ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Target className="mr-2 h-4 w-4" />
-                )}
-                Generate All Titles
-              </Button>
-
-              <Button
-                onClick={generateAllDescriptions}
-                disabled={isGenerating !== null || bulkGenerating !== null}
-                className="bg-green-500 hover:bg-green-600 text-white border-0 shadow-md hover:shadow-lg transition-all"
-                size="lg"
-              >
-                {bulkGenerating === "descriptions" ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <FileText className="mr-2 h-4 w-4" />
-                )}
-                Generate All Descriptions
-              </Button>
-
-              <Button
-                onClick={generateAllSkills}
-                disabled={isGenerating !== null || bulkGenerating !== null}
-                className="bg-purple-500 hover:bg-purple-600 text-white border-0 shadow-md hover:shadow-lg transition-all"
-                size="lg"
-              >
-                {bulkGenerating === "skills" ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Building2 className="mr-2 h-4 w-4" />
-                )}
-                Generate All Skills
-              </Button>
-            </div>
-
-            {/* Generate Tailored Resumes Button */}
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="text-center">
+              {/* Resume Generation Button */}
+              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
                 <Button
                   onClick={generateTailoredResumes}
                   disabled={
@@ -1771,15 +1570,15 @@ export function BulkJobGenerator({
                     isGeneratingResumes ||
                     !baseResumeContent
                   }
-                  className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md hover:shadow-lg transition-all"
-                  size="lg"
+                  className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-sm hover:shadow-md transition-all"
+                  size="sm"
                 >
                   {isGeneratingResumes ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
                   ) : (
-                    <FileText className="mr-2 h-4 w-4" />
+                    <FileText className="mr-2 h-3 w-3" />
                   )}
-                  Generate Tailored Resumes (
+                  Start Resume Generation (
                   {
                     jobs.filter(
                       (job) =>
@@ -1791,464 +1590,427 @@ export function BulkJobGenerator({
                   )
                 </Button>
 
-                {/* Download All Resumes Button - only show if any resumes are generated */}
-                {Object.keys(generatedResumes).length > 0 && (
-                  <Button
-                    onClick={downloadAllResumes}
-                    disabled={isGeneratingResumes}
-                    className="mt-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white border-0 shadow-md hover:shadow-lg transition-all"
-                    size="lg"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download All Resumes ({Object.keys(generatedResumes).length}
-                    )
-                  </Button>
-                )}
-
-                <p className="text-sm text-gray-600 mt-2">
-                  Generate personalized resumes for each job application using
-                  your base resume.
-                  {!baseResumeContent && (
-                    <span className="text-red-500 block">
-                      Please upload a base resume first.
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Job Table */}
-          <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
-            <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-8 py-4 border-b border-gray-200">
-              <div className="grid grid-cols-12 gap-6 font-semibold text-sm text-gray-700">
-                <div className="col-span-2 flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-blue-600" />
-                  Company URL *
-                </div>
-                <div className="col-span-2 flex items-center gap-2">
-                  <Target className="h-4 w-4 text-green-600" />
-                  Job Title
-                  <Button
-                    onClick={generateAllTitles}
-                    disabled={isGenerating !== null || bulkGenerating !== null}
-                    className="bg-transparent text-black border-1 hover:text-white transition-all"
-                    size="icon"
-                    title="Generate Titles for All Rows"
-                  >
-                    {bulkGenerating === "titles" ? (
-                      <Loader2 className="h-2 w-2 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-2 w-2" />
-                    )}
-                  </Button>
-                </div>
-                <div className="col-span-4 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-purple-600" />
-                  Description
-                  <Button
-                    onClick={generateAllDescriptions}
-                    disabled={isGenerating !== null || bulkGenerating !== null}
-                    className="bg-transparent text-black border-1 hover:text-white transition-all"
-                    size="icon"
-                    title="Generate Descriptions for All Rows"
-                  >
-                    {bulkGenerating === "descriptions" ? (
-                      <Loader2 className="h-2 w-2 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-2 w-2" />
-                    )}
-                  </Button>
-                </div>
-                <div className="col-span-3 flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-orange-600" />
-                  Skills
-                  <Button
-                    onClick={generateAllSkills}
-                    disabled={isGenerating !== null || bulkGenerating !== null}
-                    className="bg-transparent text-black border-1 hover:text-white transition-all"
-                    size="icon"
-                    title="Generate Skills for All Rows"
-                  >
-                    {bulkGenerating === "skills" ? (
-                      <Loader2 className=" h-2 w-2 animate-spin" />
-                    ) : (
-                      <Sparkles className=" h-2 w-2" />
-                    )}
-                  </Button>
-                </div>
-                <div className="col-span-1 text-center">Actions</div>
+                {/* No download functionality here anymore - moved to resume generation page */}
               </div>
             </div>
 
-            <div className="divide-y divide-gray-100">
-              {jobs.map((job, index) => (
-                <div
-                  key={job.id}
-                  className={`px-8 py-6 hover:bg-gray-50/50 transition-colors ${
-                    isGenerating === job.id ? "bg-blue-50/30" : ""
-                  }`}
-                >
-                  <div className="grid grid-cols-12 gap-6 items-start">
-                    {/* Company URL */}
-                    <div className="col-span-2">
-                      <Input
-                        value={job.companyUrl}
-                        onChange={(e) =>
-                          updateJob(job.id, "companyUrl", e.target.value)
-                        }
-                        placeholder="google.com"
-                        className="border-gray-200 focus:border-blue-500 focus:ring-blue-500/20"
-                      />
-                    </div>
+            <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+              <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-8 py-4 border-b border-gray-200">
+                <div className="grid grid-cols-12 gap-6 font-semibold text-sm text-gray-700">
+                  <div className="col-span-2 flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-blue-600" />
+                    Company URL *
+                  </div>
+                  <div className="col-span-2 flex items-center gap-2">
+                    <Target className="h-4 w-4 text-green-600" />
+                    Job Title
+                    <Button
+                      onClick={generateAllTitles}
+                      disabled={
+                        isGenerating !== null || bulkGenerating !== null
+                      }
+                      className="bg-transparent text-black border-1 hover:text-white transition-all"
+                      size="icon"
+                      title="Generate Titles for All Rows"
+                    >
+                      {bulkGenerating === "titles" ? (
+                        <Loader2 className="h-2 w-2 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-2 w-2" />
+                      )}
+                    </Button>
+                  </div>
+                  <div className="col-span-4 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-purple-600" />
+                    Description
+                    <Button
+                      onClick={generateAllDescriptions}
+                      disabled={
+                        isGenerating !== null || bulkGenerating !== null
+                      }
+                      className="bg-transparent text-black border-1 hover:text-white transition-all"
+                      size="icon"
+                      title="Generate Descriptions for All Rows"
+                    >
+                      {bulkGenerating === "descriptions" ? (
+                        <Loader2 className="h-2 w-2 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-2 w-2" />
+                      )}
+                    </Button>
+                  </div>
+                  <div className="col-span-3 flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-orange-600" />
+                    Skills
+                    <Button
+                      onClick={generateAllSkills}
+                      disabled={
+                        isGenerating !== null || bulkGenerating !== null
+                      }
+                      className="bg-transparent text-black border-1 hover:text-white transition-all"
+                      size="icon"
+                      title="Generate Skills for All Rows"
+                    >
+                      {bulkGenerating === "skills" ? (
+                        <Loader2 className=" h-2 w-2 animate-spin" />
+                      ) : (
+                        <Sparkles className=" h-2 w-2" />
+                      )}
+                    </Button>
+                  </div>
+                  <div className="col-span-1 text-center">Actions</div>
+                </div>
+              </div>
 
-                    {/* Job Title */}
-                    <div className="col-span-2">
-                      <Input
-                        value={job.jobTitle}
-                        onChange={(e) =>
-                          updateJob(job.id, "jobTitle", e.target.value)
-                        }
-                        placeholder="Software Engineer"
-                        className="border-gray-200 focus:border-green-500 focus:ring-green-500/20"
-                      />
-                    </div>
-
-                    {/* Description */}
-                    <div className="col-span-4">
-                      <Textarea
-                        value={job.description}
-                        onChange={(e) =>
-                          updateJob(job.id, "description", e.target.value)
-                        }
-                        placeholder="Join our team and work on cutting-edge technology..."
-                        className="border-gray-200 focus:border-purple-500 focus:ring-purple-500/20 resize-none h-24 text-sm"
-                        rows={3}
-                      />
-                    </div>
-
-                    {/* Skills */}
-                    <div className="col-span-3">
-                      <Textarea
-                        value={job.skills}
-                        onChange={(e) =>
-                          updateJob(job.id, "skills", e.target.value)
-                        }
-                        placeholder="React, Node.js, Python, AWS..."
-                        className="border-gray-200 focus:border-orange-500 focus:ring-orange-500/20 resize-none h-24 text-sm"
-                        rows={3}
-                      />
-                    </div>
-
-                    {/* Actions */}
-                    <div className="col-span-1 flex flex-col gap-2">
-                      <Button
-                        onClick={() => generateRowContent(job.id)}
-                        disabled={
-                          isGenerating !== null || bulkGenerating !== null
-                        }
-                        size="sm"
-                        className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0 shadow-sm h-8 text-xs font-medium"
-                      >
-                        {isGenerating === job.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-3 w-3" />
-                        )}
-                      </Button>
-
-                      {/* Individual Generate Buttons */}
-                      <div className="flex flex-col gap-1">
-                        <Button
-                          onClick={async () => {
-                            // Only generate if title is empty
-                            if (job.jobTitle && job.jobTitle.trim() !== "") {
-                              toast({
-                                title: "Title Already Exists",
-                                description:
-                                  "This job already has a title. Clear it first to regenerate.",
-                                variant: "default",
-                              });
-                              return;
-                            }
-
-                            if (!isValidUrl(job.companyUrl)) {
-                              setRowError(job.id, "Invalid URL");
-                              return;
-                            }
-                            setIsGenerating(`${job.id}-title`);
-                            clearRowError(job.id);
-                            try {
-                              const targetRole = await getTargetRole();
-                              const contextWithResume = `${
-                                baseResumeContent
-                                  ? `Resume: ${baseResumeContent.substring(
-                                      0,
-                                      200
-                                    )}`
-                                  : ""
-                              }`;
-
-                              const response = await fetch(
-                                "/api/generate-job-title",
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    company_url: job.companyUrl,
-                                    context: contextWithResume,
-                                    target_role: targetRole,
-                                    years_experience: yearsOfExperience,
-                                    language: language,
-                                  }),
-                                }
-                              );
-                              if (response.ok) {
-                                const data = await response.json();
-                                if (data.success) {
-                                  updateJob(job.id, "jobTitle", data.job_title);
-                                } else {
-                                  throw new Error(
-                                    data.error || "Failed to generate title"
-                                  );
-                                }
-                              } else {
-                                throw new Error("Failed to generate title");
-                              }
-                            } catch (err) {
-                              setRowError(job.id, "Title generation failed");
-                            } finally {
-                              setIsGenerating(null);
-                            }
-                          }}
-                          disabled={
-                            isGenerating !== null || bulkGenerating !== null
+              <div className="divide-y divide-gray-100">
+                {jobs.map((job, index) => (
+                  <div
+                    key={job.id}
+                    className={`px-8 py-6 hover:bg-gray-50/50 transition-colors ${
+                      isGenerating === job.id ? "bg-blue-50/30" : ""
+                    }`}
+                  >
+                    <div className="grid grid-cols-12 gap-6 items-start">
+                      {/* Company URL */}
+                      <div className="col-span-2">
+                        <Input
+                          value={job.companyUrl}
+                          onChange={(e) =>
+                            updateJob(job.id, "companyUrl", e.target.value)
                           }
-                          size="sm"
-                          variant="outline"
-                          className="h-6 text-xs px-2 text-blue-600 border-blue-200"
-                        >
-                          {isGenerating === `${job.id}-title` ? (
-                            <Loader2 className="h-2 w-2 animate-spin" />
-                          ) : (
-                            "T"
-                          )}
-                        </Button>
-
-                        <Button
-                          onClick={async () => {
-                            // Only generate if description is empty
-                            if (
-                              job.description &&
-                              job.description.trim() !== ""
-                            ) {
-                              toast({
-                                title: "Description Already Exists",
-                                description:
-                                  "This job already has a description. Clear it first to regenerate.",
-                                variant: "default",
-                              });
-                              return;
-                            }
-
-                            if (!isValidUrl(job.companyUrl)) {
-                              setRowError(job.id, "Invalid URL");
-                              return;
-                            }
-                            setIsGenerating(`${job.id}-desc`);
-                            clearRowError(job.id);
-                            try {
-                              const contextWithResume = `${
-                                baseResumeContent
-                                  ? `Resume: ${baseResumeContent.substring(
-                                      0,
-                                      200
-                                    )}`
-                                  : ""
-                              }`;
-
-                              const response = await fetch(
-                                "/api/generate-job-description",
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    company_url: job.companyUrl,
-                                    job_title: job.jobTitle,
-                                    context: contextWithResume,
-                                    years_experience: yearsOfExperience,
-                                    language: language,
-                                  }),
-                                }
-                              );
-                              if (response.ok) {
-                                const data = await response.json();
-                                if (data.success) {
-                                  updateJob(
-                                    job.id,
-                                    "description",
-                                    data.job_description
-                                  );
-                                } else {
-                                  throw new Error(
-                                    data.error ||
-                                      "Failed to generate description"
-                                  );
-                                }
-                              } else {
-                                throw new Error(
-                                  "Failed to generate description"
-                                );
-                              }
-                            } catch (err) {
-                              setRowError(
-                                job.id,
-                                "Description generation failed"
-                              );
-                            } finally {
-                              setIsGenerating(null);
-                            }
-                          }}
-                          disabled={
-                            isGenerating !== null || bulkGenerating !== null
-                          }
-                          size="sm"
-                          variant="outline"
-                          className="h-6 text-xs px-2 text-green-600 border-green-200"
-                        >
-                          {isGenerating === `${job.id}-desc` ? (
-                            <Loader2 className="h-2 w-2 animate-spin" />
-                          ) : (
-                            "D"
-                          )}
-                        </Button>
-
-                        <Button
-                          onClick={async () => {
-                            // Only generate if skills is empty
-                            if (job.skills && job.skills.trim() !== "") {
-                              toast({
-                                title: "Skills Already Exist",
-                                description:
-                                  "This job already has skills. Clear them first to regenerate.",
-                                variant: "default",
-                              });
-                              return;
-                            }
-
-                            if (!isValidUrl(job.companyUrl)) {
-                              setRowError(job.id, "Invalid URL");
-                              return;
-                            }
-                            setIsGenerating(`${job.id}-skills`);
-                            clearRowError(job.id);
-                            try {
-                              const response = await fetch(
-                                "/api/generate-job-skills",
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    company_url: job.companyUrl,
-                                    job_title: job.jobTitle,
-                                    job_description: job.description,
-                                    years_experience: yearsOfExperience,
-                                    language: language,
-                                  }),
-                                }
-                              );
-                              if (response.ok) {
-                                const data = await response.json();
-                                if (data.success) {
-                                  updateJob(job.id, "skills", data.skills);
-                                } else {
-                                  throw new Error(
-                                    data.error || "Failed to generate skills"
-                                  );
-                                }
-                              } else {
-                                throw new Error("Failed to generate skills");
-                              }
-                            } catch (err) {
-                              setRowError(job.id, "Skills generation failed");
-                            } finally {
-                              setIsGenerating(null);
-                            }
-                          }}
-                          disabled={
-                            isGenerating !== null || bulkGenerating !== null
-                          }
-                          size="sm"
-                          variant="outline"
-                          className="h-6 text-xs px-2 text-purple-600 border-purple-200"
-                        >
-                          {isGenerating === `${job.id}-skills` ? (
-                            <Loader2 className="h-2 w-2 animate-spin" />
-                          ) : (
-                            "S"
-                          )}
-                        </Button>
+                          placeholder="google.com"
+                          className="border-gray-200 focus:border-blue-500 focus:ring-blue-500/20"
+                        />
                       </div>
 
-                      {/* Preview and Download Resume Buttons - only show if resume is generated */}
-                      {generatedResumes[job.id] && (
-                        <>
-                          <Button
-                            onClick={() => previewResumeForJob(job.id)}
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-300"
-                            title="Preview tailored resume"
-                          >
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            onClick={() => downloadResumeForJob(job.id)}
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200 hover:border-green-300"
-                            title="Download tailored resume"
-                          >
-                            <Download className="h-3 w-3" />
-                          </Button>
-                        </>
-                      )}
+                      {/* Job Title */}
+                      <div className="col-span-2">
+                        <Input
+                          value={job.jobTitle}
+                          onChange={(e) =>
+                            updateJob(job.id, "jobTitle", e.target.value)
+                          }
+                          placeholder="Software Engineer"
+                          className="border-gray-200 focus:border-green-500 focus:ring-green-500/20"
+                        />
+                      </div>
 
-                      {jobs.length > 1 && (
+                      {/* Description */}
+                      <div className="col-span-4">
+                        <Textarea
+                          value={job.description}
+                          onChange={(e) =>
+                            updateJob(job.id, "description", e.target.value)
+                          }
+                          placeholder="Join our team and work on cutting-edge technology..."
+                          className="border-gray-200 focus:border-purple-500 focus:ring-purple-500/20 resize-none h-24 text-sm"
+                          rows={3}
+                        />
+                      </div>
+
+                      {/* Skills */}
+                      <div className="col-span-3">
+                        <Textarea
+                          value={job.skills}
+                          onChange={(e) =>
+                            updateJob(job.id, "skills", e.target.value)
+                          }
+                          placeholder="React, Node.js, Python, AWS..."
+                          className="border-gray-200 focus:border-orange-500 focus:ring-orange-500/20 resize-none h-24 text-sm"
+                          rows={3}
+                        />
+                      </div>
+
+                      {/* Actions */}
+                      <div className="col-span-1 flex flex-col gap-2">
                         <Button
-                          onClick={() => removeRow(job.id)}
+                          onClick={() => generateRowContent(job.id)}
+                          disabled={
+                            isGenerating !== null || bulkGenerating !== null
+                          }
                           size="sm"
-                          variant="outline"
-                          className="h-8 text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200 hover:border-red-300"
+                          className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0 shadow-sm h-8 text-xs font-medium"
                         >
-                          <X className="h-3 w-3" />
+                          {isGenerating === job.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3 w-3" />
+                          )}
                         </Button>
-                      )}
+
+                        {/* Individual Generate Buttons */}
+                        <div className="flex flex-col gap-1">
+                          <Button
+                            onClick={async () => {
+                              // Only generate if title is empty
+                              if (job.jobTitle && job.jobTitle.trim() !== "") {
+                                toast({
+                                  title: "Title Already Exists",
+                                  description:
+                                    "This job already has a title. Clear it first to regenerate.",
+                                  variant: "default",
+                                });
+                                return;
+                              }
+
+                              if (!isValidUrl(job.companyUrl)) {
+                                setRowError(job.id, "Invalid URL");
+                                return;
+                              }
+                              setIsGenerating(`${job.id}-title`);
+                              clearRowError(job.id);
+                              try {
+                                const targetRole = await getTargetRole();
+                                const contextWithResume = `${
+                                  baseResumeContent
+                                    ? `Resume: ${baseResumeContent.substring(
+                                        0,
+                                        200
+                                      )}`
+                                    : ""
+                                }`;
+
+                                const response = await fetch(
+                                  "/api/generate-job-title",
+                                  {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({
+                                      company_url: job.companyUrl,
+                                      context: contextWithResume,
+                                      target_role: targetRole,
+                                      years_experience: yearsOfExperience,
+                                      language: language,
+                                    }),
+                                  }
+                                );
+                                if (response.ok) {
+                                  const data = await response.json();
+                                  if (data.success) {
+                                    updateJob(
+                                      job.id,
+                                      "jobTitle",
+                                      data.job_title
+                                    );
+                                  } else {
+                                    throw new Error(
+                                      data.error || "Failed to generate title"
+                                    );
+                                  }
+                                } else {
+                                  throw new Error("Failed to generate title");
+                                }
+                              } catch (err) {
+                                setRowError(job.id, "Title generation failed");
+                              } finally {
+                                setIsGenerating(null);
+                              }
+                            }}
+                            disabled={
+                              isGenerating !== null || bulkGenerating !== null
+                            }
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs px-2 text-blue-600 border-blue-200"
+                          >
+                            {isGenerating === `${job.id}-title` ? (
+                              <Loader2 className="h-2 w-2 animate-spin" />
+                            ) : (
+                              "T"
+                            )}
+                          </Button>
+
+                          <Button
+                            onClick={async () => {
+                              // Only generate if description is empty
+                              if (
+                                job.description &&
+                                job.description.trim() !== ""
+                              ) {
+                                toast({
+                                  title: "Description Already Exists",
+                                  description:
+                                    "This job already has a description. Clear it first to regenerate.",
+                                  variant: "default",
+                                });
+                                return;
+                              }
+
+                              if (!isValidUrl(job.companyUrl)) {
+                                setRowError(job.id, "Invalid URL");
+                                return;
+                              }
+                              setIsGenerating(`${job.id}-desc`);
+                              clearRowError(job.id);
+                              try {
+                                const contextWithResume = `${
+                                  baseResumeContent
+                                    ? `Resume: ${baseResumeContent.substring(
+                                        0,
+                                        200
+                                      )}`
+                                    : ""
+                                }`;
+
+                                const response = await fetch(
+                                  "/api/generate-job-description",
+                                  {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({
+                                      company_url: job.companyUrl,
+                                      job_title: job.jobTitle,
+                                      context: contextWithResume,
+                                      years_experience: yearsOfExperience,
+                                      language: language,
+                                    }),
+                                  }
+                                );
+                                if (response.ok) {
+                                  const data = await response.json();
+                                  if (data.success) {
+                                    updateJob(
+                                      job.id,
+                                      "description",
+                                      data.job_description
+                                    );
+                                  } else {
+                                    throw new Error(
+                                      data.error ||
+                                        "Failed to generate description"
+                                    );
+                                  }
+                                } else {
+                                  throw new Error(
+                                    "Failed to generate description"
+                                  );
+                                }
+                              } catch (err) {
+                                setRowError(
+                                  job.id,
+                                  "Description generation failed"
+                                );
+                              } finally {
+                                setIsGenerating(null);
+                              }
+                            }}
+                            disabled={
+                              isGenerating !== null || bulkGenerating !== null
+                            }
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs px-2 text-green-600 border-green-200"
+                          >
+                            {isGenerating === `${job.id}-desc` ? (
+                              <Loader2 className="h-2 w-2 animate-spin" />
+                            ) : (
+                              "D"
+                            )}
+                          </Button>
+
+                          <Button
+                            onClick={async () => {
+                              // Only generate if skills is empty
+                              if (job.skills && job.skills.trim() !== "") {
+                                toast({
+                                  title: "Skills Already Exist",
+                                  description:
+                                    "This job already has skills. Clear them first to regenerate.",
+                                  variant: "default",
+                                });
+                                return;
+                              }
+
+                              if (!isValidUrl(job.companyUrl)) {
+                                setRowError(job.id, "Invalid URL");
+                                return;
+                              }
+                              setIsGenerating(`${job.id}-skills`);
+                              clearRowError(job.id);
+                              try {
+                                const response = await fetch(
+                                  "/api/generate-job-skills",
+                                  {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({
+                                      company_url: job.companyUrl,
+                                      job_title: job.jobTitle,
+                                      job_description: job.description,
+                                      years_experience: yearsOfExperience,
+                                      language: language,
+                                    }),
+                                  }
+                                );
+                                if (response.ok) {
+                                  const data = await response.json();
+                                  if (data.success) {
+                                    updateJob(job.id, "skills", data.skills);
+                                  } else {
+                                    throw new Error(
+                                      data.error || "Failed to generate skills"
+                                    );
+                                  }
+                                } else {
+                                  throw new Error("Failed to generate skills");
+                                }
+                              } catch (err) {
+                                setRowError(job.id, "Skills generation failed");
+                              } finally {
+                                setIsGenerating(null);
+                              }
+                            }}
+                            disabled={
+                              isGenerating !== null || bulkGenerating !== null
+                            }
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs px-2 text-purple-600 border-purple-200"
+                          >
+                            {isGenerating === `${job.id}-skills` ? (
+                              <Loader2 className="h-2 w-2 animate-spin" />
+                            ) : (
+                              "S"
+                            )}
+                          </Button>
+                        </div>
+
+                        {jobs.length > 1 && (
+                          <Button
+                            onClick={() => removeRow(job.id)}
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200 hover:border-red-300"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Row Error Display */}
+                    {rowErrors[job.id] && (
+                      <div className="mt-2 px-4 py-2 bg-red-50 border border-red-200 rounded-md">
+                        <p className="text-sm text-red-600 flex items-center gap-2">
+                          <span className="font-semibold">Error:</span>
+                          {rowErrors[job.id]}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Row number indicator */}
+                    <div className="absolute left-2 top-6 text-xs text-gray-400 font-mono">
+                      {index + 1}
                     </div>
                   </div>
-
-                  {/* Row Error Display */}
-                  {rowErrors[job.id] && (
-                    <div className="mt-2 px-4 py-2 bg-red-50 border border-red-200 rounded-md">
-                      <p className="text-sm text-red-600 flex items-center gap-2">
-                        <span className="font-semibold">Error:</span>
-                        {rowErrors[job.id]}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Row number indicator */}
-                  <div className="absolute left-2 top-6 text-xs text-gray-400 font-mono">
-                    {index + 1}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
 
@@ -2331,188 +2093,6 @@ export function BulkJobGenerator({
           </div>
         </CardContent>
       </Card>
-
-      {/* Generate All Applications Button */}
-      {/* <div className="flex justify-center pt-4">
-        <Button
-          onClick={() => onJobsGenerated?.(jobs)}
-          size="lg"
-          className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-12 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
-        >
-          <Sparkles className="mr-3 h-6 w-6" />
-          Generate All Applications ({jobs.length})
-        </Button>
-      </div> */}
-
-      {/* Preview Modal */}
-      <Dialog open={previewModalOpen} onOpenChange={closePreviewModal}>
-        <DialogContent className="max-w-[95vw] w-full h-[95vh] p-0 gap-0">
-          <DialogHeader className="p-6 pb-4 border-b bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-lg">
-            <DialogTitle className="text-xl font-semibold flex items-center gap-2">
-              <Eye className="h-5 w-5 text-blue-600" />
-              Resume Preview Comparison
-              {previewJobId && (
-                <Badge
-                  variant="secondary"
-                  className="ml-2 bg-blue-100 text-blue-800"
-                >
-                  {jobs.find((j) => j.id === previewJobId)?.jobTitle || "Job"}
-                </Badge>
-              )}
-            </DialogTitle>
-            <p className="text-sm text-gray-600 mt-1">
-              Compare your original resume with the AI-tailored version
-            </p>
-          </DialogHeader>
-
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 h-full overflow-hidden">
-            {/* Left: Original Resume */}
-            <div className="flex flex-col h-full min-h-0">
-              <h3 className="text-lg font-semibold mb-3 text-gray-700 flex items-center gap-2">
-                <FileText className="h-4 w-4 text-gray-600" />
-                Original Resume
-              </h3>
-              <div className="flex-1 border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-white shadow-sm min-h-0">
-                {previewUrls.oldResume ? (
-                  <div className="w-full h-full overflow-auto bg-gray-50/30">
-                    <div
-                      id="old-resume-preview"
-                      className="docx-wrapper min-h-full"
-                      style={{ minHeight: "400px" }}
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-gray-500 bg-gray-50/30">
-                    <div className="text-center">
-                      <FileText className="h-16 w-16 mx-auto mb-3 opacity-40" />
-                      <p className="text-sm font-medium">
-                        No base resume available
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Upload a resume to see comparison
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Center: New Tailored Resume */}
-            <div className="flex flex-col h-full min-h-0">
-              <h3 className="text-lg font-semibold mb-3 text-green-700 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-green-600" />
-                Tailored Resume
-                <Badge
-                  variant="outline"
-                  className="ml-auto text-xs bg-green-50 text-green-700 border-green-200"
-                >
-                  AI Generated
-                </Badge>
-              </h3>
-              <div className="flex-1 border-2 border-green-300 rounded-xl overflow-hidden bg-white shadow-sm min-h-0">
-                {previewUrls.newResume ? (
-                  <div className="w-full h-full overflow-auto bg-green-50/20">
-                    <div
-                      id="new-resume-preview"
-                      className="docx-wrapper min-h-full"
-                      style={{ minHeight: "400px" }}
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-gray-500 bg-green-50/20">
-                    <div className="text-center">
-                      <FileText className="h-16 w-16 mx-auto mb-3 opacity-40" />
-                      <p className="text-sm font-medium">
-                        Resume not available
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right: Job Information Card */}
-            <div className="flex flex-col h-full min-h-0 lg:max-w-sm">
-              <h3 className="text-lg font-semibold mb-3 text-purple-700 flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-purple-600" />
-                Job Details
-              </h3>
-              <div className="flex-1 space-y-4 overflow-y-auto">
-                {previewJobId &&
-                  (() => {
-                    const job = jobs.find((j) => j.id === previewJobId);
-                    return job ? (
-                      <div className="space-y-4">
-                        <Card className="border-purple-200 bg-purple-50/50 shadow-sm">
-                          <CardHeader className="pb-3 px-4 pt-4">
-                            <CardTitle className="text-base text-purple-800 flex items-center gap-2">
-                              <Target className="h-4 w-4" />
-                              {job.jobTitle || "Job Title"}
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0 px-4 pb-4">
-                            <div className="bg-white/60 rounded-md p-2 border border-purple-100">
-                              <p className="text-xs text-purple-600 break-all font-mono">
-                                {job.companyUrl}
-                              </p>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card className="border-blue-200 bg-blue-50/50 shadow-sm">
-                          <CardHeader className="pb-3 px-4 pt-4">
-                            <CardTitle className="text-sm text-blue-800 flex items-center gap-2">
-                              <FileText className="h-4 w-4" />
-                              Job Description
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0 px-4 pb-4">
-                            <div className="bg-white/60 rounded-md p-3 border border-blue-100 max-h-40 overflow-y-auto">
-                              <p className="text-xs text-blue-700 leading-relaxed whitespace-pre-wrap">
-                                {job.description || "No description available"}
-                              </p>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card className="border-orange-200 bg-orange-50/50 shadow-sm">
-                          <CardHeader className="pb-3 px-4 pt-4">
-                            <CardTitle className="text-sm text-orange-800 flex items-center gap-2">
-                              <Brain className="h-4 w-4" />
-                              Required Skills
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0 px-4 pb-4">
-                            <div className="bg-white/60 rounded-md p-3 border border-orange-100 max-h-32 overflow-y-auto">
-                              <div className="flex flex-wrap gap-1">
-                                {job.skills ? (
-                                  job.skills
-                                    .split(/[,;]/)
-                                    .map((skill, index) => (
-                                      <span
-                                        key={index}
-                                        className="inline-block bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-md border border-orange-200"
-                                      >
-                                        {skill.trim()}
-                                      </span>
-                                    ))
-                                ) : (
-                                  <span className="text-xs text-orange-600">
-                                    No skills specified
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    ) : null;
-                  })()}
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Toaster />
     </div>

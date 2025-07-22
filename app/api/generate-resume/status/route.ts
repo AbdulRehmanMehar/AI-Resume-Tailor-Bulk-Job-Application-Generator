@@ -1,81 +1,73 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import OpenAI from "openai";
+import fs from "fs";
+import path from "path";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Use file-based storage for job data (in production, use Redis or database)
+const STORAGE_DIR = path.join(process.cwd(), ".tmp");
+const ensureStorageDir = () => {
+  if (!fs.existsSync(STORAGE_DIR)) {
+    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+  }
+};
+
+const getJobData = (taskId: string) => {
+  ensureStorageDir();
+  const filePath = path.join(STORAGE_DIR, `${taskId}.json`);
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error(`Error reading job data for ${taskId}:`, error);
+  }
+  return null;
+};
 
 export async function GET(request: NextRequest) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: "OpenAI API key not configured." },
-        { status: 500 }
-      );
-    }
-
     console.log(`Full request URL: ${request.url}`);
     const { searchParams } = new URL(request.url);
-    const threadId = searchParams.get("threadId");
-    const runId = searchParams.get("runId");
+    const taskId = searchParams.get("taskId");
 
-    console.log(`Parsed from URL: threadId=${threadId}, runId=${runId}`);
-    console.log(
-      `threadId type: ${typeof threadId}, runId type: ${typeof runId}`
-    );
+    console.log(`Checking status for taskId: ${taskId}`);
 
-    if (!threadId || !runId) {
-      console.error(`Missing parameters: threadId=${threadId}, runId=${runId}`);
+    if (!taskId || taskId === "undefined") {
+      console.error(`Missing or invalid taskId: ${taskId}`);
       return NextResponse.json(
-        { error: "Missing threadId or runId." },
+        { error: "Missing or invalid taskId." },
         { status: 400 }
       );
     }
 
-    // Based on the error path pattern, try different parameter order
-    console.log(
-      `About to call retrieve with threadId=${threadId}, runId=${runId}`
-    );
+    const jobData = getJobData(taskId);
 
-    // Ensure threadId and runId are not null
-    if (threadId === null || runId === null) {
+    if (!jobData) {
       return NextResponse.json(
-        { error: "threadId or runId is null" },
-        { status: 400 }
+        { error: "Task not found or expired." },
+        { status: 404 }
       );
     }
 
-    // The error shows /threads/undefined/runs/threadId which suggests runId should be first
-    const run = await openai.beta.threads.runs.retrieve(runId, {
-      thread_id: threadId,
-    });
+    console.log(`Job status: ${jobData.status}`);
 
-    if (run.status === "completed") {
-      const messages = await openai.beta.threads.messages.list(threadId);
-      const assistantMessage = messages.data.find(
-        (m) => m.role === "assistant"
-      );
-      const resume =
-        assistantMessage?.content[0].type === "text"
-          ? assistantMessage.content[0].text.value
-          : null;
-
-      if (!resume) {
-        return NextResponse.json({
-          status: "failed",
-          error: "Assistant did not return a valid response.",
-        });
-      }
-      return NextResponse.json({ status: "completed", resume });
-    } else if (
-      run.status === "failed" ||
-      run.status === "cancelled" ||
-      run.status === "expired"
-    ) {
-      const errorMessage =
-        run.last_error?.message || `Run failed with status: ${run.status}`;
-      return NextResponse.json({ status: "failed", error: errorMessage });
+    if (jobData.status === "completed") {
+      return NextResponse.json({
+        status: "completed",
+        resume: jobData.resumeText,
+        resumeUrl: jobData.resumeUrl,
+        textUrl: jobData.textUrl,
+      });
+    } else if (jobData.status === "error") {
+      return NextResponse.json({
+        status: "error",
+        error: jobData.error || "Unknown error occurred",
+      });
     } else {
-      return NextResponse.json({ status: "in_progress" });
+      return NextResponse.json({
+        status: "in_progress",
+      });
     }
   } catch (error: any) {
     console.error("Error checking resume status:", error);

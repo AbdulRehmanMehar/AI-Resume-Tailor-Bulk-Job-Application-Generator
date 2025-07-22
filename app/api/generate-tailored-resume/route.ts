@@ -128,32 +128,53 @@ const GENERATE_TAILORED_RESUME_SCHEMA = {
           email: {
             type: "string",
             description:
-              "The candidate's email address. ONLY include if has_email is true in source_content_analysis.",
+              "The candidate's exact email address as found in the original resume. ONLY include if has_email is true in source_content_analysis.",
           },
           phone: {
             type: "string",
             description:
-              "The candidate's phone number. ONLY include if has_phone is true in source_content_analysis.",
+              "The candidate's exact phone number as found in the original resume. ONLY include if has_phone is true in source_content_analysis.",
           },
           location: {
             type: "string",
             description:
-              "The candidate's location. ONLY include if has_location is true in source_content_analysis.",
+              "The candidate's exact location as found in the original resume. ONLY include if has_location is true in source_content_analysis.",
           },
           linkedin: {
             type: "string",
             description:
-              "LinkedIn profile URL. ONLY include if has_linkedin is true in source_content_analysis.",
+              "The candidate's exact LinkedIn profile URL or username as found in the original resume. Include the full URL if provided (e.g., 'https://linkedin.com/in/username' or 'linkedin.com/in/username'). ONLY include if has_linkedin is true in source_content_analysis.",
           },
           github: {
             type: "string",
             description:
-              "GitHub profile URL. ONLY include if has_github is true in source_content_analysis.",
+              "The candidate's exact GitHub profile URL or username as found in the original resume. Include the full URL if provided (e.g., 'https://github.com/username' or 'github.com/username'). ONLY include if has_github is true in source_content_analysis.",
           },
           website: {
             type: "string",
             description:
-              "Personal/professional website or portfolio URL. ONLY include if has_social_links is true in source_content_analysis.",
+              "The candidate's exact personal/professional website or portfolio URL as found in the original resume. Include the full URL if provided. ONLY include if has_social_links is true in source_content_analysis.",
+          },
+          social_links: {
+            type: "array",
+            description:
+              "Additional social media links found in the original resume (Twitter, Instagram, Behance, etc.). ONLY include if has_social_links is true in source_content_analysis.",
+            items: {
+              type: "object",
+              required: [],
+              properties: {
+                platform: {
+                  type: "string",
+                  description:
+                    "The name of the social media platform (e.g., Twitter, Instagram, Behance)",
+                },
+                url: {
+                  type: "string",
+                  description:
+                    "The exact URL or username as found in the original resume",
+                },
+              },
+            },
           },
           willing_to_relocate: {
             type: "boolean",
@@ -167,16 +188,16 @@ const GENERATE_TAILORED_RESUME_SCHEMA = {
       professional_summary: {
         type: "string",
         description:
-          "A concise, tailored summary highlighting the candidate's strengths and fit for the specific role. ALWAYS generate this section to align the candidate's skillset with the job requirements, regardless of whether it existed in the original resume.",
+          "A strategically crafted 3-4 sentence professional summary that positions the candidate as the ideal fit for the target role. Must include relevant years of experience, 3-5 key qualifications that match job requirements, and industry-specific terminology from the job posting. This should read like a compelling elevator pitch tailored specifically for this position.",
       },
       skills: {
         type: "array",
         description:
-          "List of the most relevant skills, technologies, or competencies. ONLY include if has_skills is true in source_content_analysis.",
+          "Strategically ordered list of the most relevant skills, technologies, and competencies for the target role. Must be reordered to prioritize exact matches with job requirements, using terminology from the job description. Lead with the most critical skills for the position. ONLY include if has_skills is true in source_content_analysis.",
         items: {
           type: "string",
           description:
-            "A relevant skill or competency, matching job description keywords.",
+            "A highly relevant skill, technology, or competency that matches job description requirements. Use exact terminology from the job posting when possible.",
         },
       },
       work_experience: {
@@ -220,7 +241,7 @@ const GENERATE_TAILORED_RESUME_SCHEMA = {
             job_title: {
               type: "string",
               description:
-                "The candidate's official title in this position. ONLY include if has_job_title is true.",
+                "The candidate's job title, enhanced to better reflect their contributions and alignment with target role progression. May include descriptive elements (e.g., 'Software Developer (Full-Stack Applications)' or 'Marketing Assistant & Content Strategist') while maintaining core accuracy. ONLY include if has_job_title is true.",
             },
             company: {
               type: "string",
@@ -245,11 +266,11 @@ const GENERATE_TAILORED_RESUME_SCHEMA = {
             responsibilities: {
               type: "array",
               description:
-                "List of achievements/responsibilities for this role. ONLY include if has_responsibilities is true.",
+                "COMPREHENSIVE list of job-tailored achievements and responsibilities. Each bullet must be strategically rewritten to emphasize relevance to the target role, using action verbs from the job description, quantified results, and highlighting transferable skills. Transform duty-based descriptions into achievement-focused statements. ONLY include if has_responsibilities is true.",
               items: {
                 type: "string",
                 description:
-                  "A bullet describing a key responsibility or achievement.",
+                  "A strategically crafted bullet point showcasing achievements, quantified results, and skills relevant to the target job. Use strong action verbs, include metrics when possible, and emphasize impact over duties.",
               },
             },
           },
@@ -528,24 +549,64 @@ export async function POST(request: NextRequest) {
     }
 
     // Construct the prompt for resume tailoring
-    const systemPrompt = `You are an expert resume writer and career coach. Your task is to create a tailored resume based on the provided job posting and original resume.
+    const systemPrompt = `You are an expert resume writer and career coach specializing in ATS-optimized, job-targeted resume tailoring. Your task is to create a comprehensively tailored resume that maximizes interview potential for the specific target role.
 
-CRITICAL INSTRUCTION - DATA PRESERVATION & SECTION ANALYSIS:
-First, carefully analyze the original resume text to determine what sections and information are actually present. You must NEVER fabricate, assume, or create information that is not explicitly stated in the original resume.
+CRITICAL INSTRUCTION - COMPREHENSIVE JOB TAILORING:
+You must create a resume that strategically aligns every element with the target job while preserving factual accuracy. This goes beyond simple keyword matching - you need to reposition the candidate as the ideal fit for this specific role.
 
-Key Instructions:
-1. Analyze the job description to identify key requirements, skills, and qualifications
-2. Use the original resume as the foundation, preserving ALL factual information exactly as provided
+TAILORING STRATEGY:
+1. DEEP JOB ANALYSIS: Extract key requirements, skills, technologies, responsibilities, and qualifications from the job description
+2. STRATEGIC POSITIONING: Reframe the candidate's experience to highlight relevance to the target role
+3. EXPERIENCE TRANSFORMATION: Rewrite ALL work experience bullets to emphasize achievements and responsibilities that directly relate to the target job
+4. TITLE OPTIMIZATION: Enhance job titles to better reflect the candidate's actual contributions and alignment with career progression toward the target role
+5. KEYWORD INTEGRATION: Seamlessly integrate job description keywords throughout all sections
+
+MANDATORY TAILORING REQUIREMENTS:
+
+WORK EXPERIENCE TRANSFORMATION:
+- REWRITE every single bullet point to emphasize relevance to the target job
+- Use action verbs that match the job description language
+- Quantify achievements wherever possible (percentages, dollar amounts, team sizes, timeframes)
+- Highlight transferable skills that apply to the target role
+- Reorganize bullets to lead with the most relevant accomplishments
+- Include technologies, methodologies, and approaches mentioned in the job posting
+- Focus on RESULTS and IMPACT rather than just duties
+- If the original role differs from target role, emphasize overlapping skills and responsibilities
+
+JOB TITLE ENHANCEMENT:
+- If the candidate's actual job title doesn't fully capture their contributions, you may enhance it with clarifying information
+- Example: "Software Developer" → "Software Developer (Full-Stack Web Applications)"
+- Example: "Marketing Assistant" → "Marketing Assistant & Content Strategist" 
+- Example: "Project Coordinator" → "Technical Project Coordinator"
+- Keep the core title honest but add descriptive elements that highlight relevant experience
+- Ensure enhanced titles accurately reflect the person's actual responsibilities and skills
+
+SKILLS REORDERING:
+- Prioritize skills that directly match the job requirements
+- Group related skills strategically
+- Include both hard and soft skills mentioned in the job posting
+- Use exact terminology from the job description when possible
+
+PROFESSIONAL SUMMARY OPTIMIZATION:
+- Create a compelling 3-4 sentence summary that positions the candidate as ideal for THIS specific role
+- Include years of experience relevant to the target position
+- Mention 3-5 key qualifications that directly match job requirements
+- Use industry-specific language and terminology from the job posting
+
+DATA PRESERVATION & ANALYSIS:
 3. CAREFULLY analyze what sections and information are present in the original resume:
    
-   CONTACT INFORMATION:
-   - Email address (look for @ symbols and email patterns)
-   - Phone number (look for number patterns like (555) 123-4567)
-   - Location/address (city, state, country information)
-   - LinkedIn profile (linkedin.com URLs or mentions)
-   - GitHub profile (github.com URLs or mentions)
-   - Other social links or websites
-   - Any mention of willingness to relocate
+   CONTACT INFORMATION EXTRACTION - PRESERVE EXACT FORMATTING:
+   - Email address: Look for @ symbols and email patterns. Extract the EXACT email address as written.
+   - Phone number: Look for number patterns like (555) 123-4567, +1-555-123-4567, 555.123.4567. Extract the EXACT format as written.
+   - Location/address: Extract city, state, country information exactly as written.
+   - LinkedIn profile: Look for linkedin.com URLs, LinkedIn mentions, or profile references. Extract the EXACT URL or username as written (e.g., "https://linkedin.com/in/johndoe", "linkedin.com/in/johndoe", or "LinkedIn: johndoe").
+   - GitHub profile: Look for github.com URLs, GitHub mentions, or profile references. Extract the EXACT URL or username as written (e.g., "https://github.com/johndoe", "github.com/johndoe", or "GitHub: johndoe").
+   - Portfolio/Website: Look for any website URLs, portfolio links, or personal domains. Extract the EXACT URL as written.
+   - Social links: Look for Twitter, Instagram, Behance, personal websites, or any other social media mentions. Extract as array of platform/url pairs with EXACT formatting.
+   - Relocation willingness: Look for phrases like "willing to relocate", "open to relocation", etc.
+
+   CRITICAL: Do NOT modify, format, or standardize contact information. Use the EXACT text as it appears in the original resume. If a LinkedIn profile is listed as "linkedin.com/in/johndoe", keep it exactly like that. If it's listed as "https://www.linkedin.com/in/johndoe", preserve the full URL. If it's listed as just "johndoe", keep it as "johndoe".
 
    RESUME SECTIONS:
    - Skills/competencies/technical skills section
@@ -603,15 +664,44 @@ Key Instructions:
 4. In the source_content_analysis section, accurately report what sections and information were found
 5. For array sections (work_experience, education, etc.), include has_{fieldname} flags within each object to indicate which sub-fields are present
 6. ONLY include sections and fields that were present in the original resume
-7. For sections that exist, tailor the content to highlight relevance for the specific role
-8. Reorder and emphasize skills that match the job requirements
-9. Rewrite work experience bullets to emphasize achievements and responsibilities relevant to the target role
-10. Use action verbs and quantify results wherever possible
-11. Maintain complete honesty - do not fabricate experience, skills, sections, or contact information
-12. Ensure the resume is ATS-friendly with relevant keywords from the job description
-13. Keep the resume concise and professional
 
-REMEMBER: If a section is not in the original resume, do NOT include it in the output. The source_content_analysis should accurately reflect what sections were actually found. For each entry in array sections, only include the sub-fields that are actually present in the original data.
+MANDATORY EXECUTION STEPS:
+7. **TRANSFORM ALL WORK EXPERIENCE BULLETS**: Rewrite every single responsibility/achievement to highlight relevance for the target role. Use strong action verbs, quantify results, and emphasize transferable skills.
+8. **ENHANCE JOB TITLES**: Thoughtfully enhance job titles to better reflect the candidate's contributions while maintaining honesty. Add descriptive elements that show progression toward the target role.
+9. **STRATEGIC SKILL REORDERING**: Prioritize and reorder skills to match job requirements exactly. Lead with the most relevant technologies and competencies.
+10. **KEYWORD INTEGRATION**: Seamlessly weave job description keywords throughout work experience, skills, and professional summary.
+11. **RESULTS-FOCUSED LANGUAGE**: Transform duty-based descriptions into achievement-focused statements with measurable impact.
+12. **INDUSTRY ALIGNMENT**: Use terminology and language patterns that match the target industry and role level.
+13. **ATS OPTIMIZATION**: Ensure the resume contains sufficient keyword density and formatting for ATS systems.
+
+EXAMPLES OF EFFECTIVE WORK EXPERIENCE TRANSFORMATION:
+
+BEFORE (Generic): "Responsible for developing software applications"
+AFTER (Tailored for Full-Stack Developer): "Architected and developed responsive web applications using React, Node.js, and PostgreSQL, serving 10,000+ daily active users with 99.9% uptime"
+
+BEFORE (Generic): "Managed social media accounts"  
+AFTER (Tailored for Digital Marketing Manager): "Strategically managed multi-platform social media campaigns, increasing engagement by 150% and driving $2M+ in revenue through targeted content strategies and data-driven optimization"
+
+BEFORE (Generic): "Worked on team projects"
+AFTER (Tailored for Project Manager): "Led cross-functional agile teams of 8+ developers and designers, delivering enterprise software solutions 20% ahead of schedule using Scrum methodology and stakeholder communication frameworks"
+
+JOB TITLE ENHANCEMENT EXAMPLES:
+BEFORE: "Developer" → AFTER: "Full-Stack Developer (React/Node.js Applications)"
+BEFORE: "Analyst" → AFTER: "Business Intelligence Analyst & Data Visualization Specialist"  
+BEFORE: "Coordinator" → AFTER: "Technical Project Coordinator & Stakeholder Liaison"
+
+REMEMBER: Every element must serve the goal of positioning this candidate as the ideal hire for the specific target role. This is not just keyword stuffing - it's strategic repositioning based on genuine skills and experience.
+
+REMEMBER: Every element must serve the goal of positioning this candidate as the ideal hire for the specific target role. This is not just keyword stuffing - it's strategic repositioning based on genuine skills and experience.
+
+FINAL VALIDATION CHECKLIST:
+✓ Every work experience bullet has been rewritten with target role relevance
+✓ Job titles are enhanced to show career progression alignment  
+✓ Skills are reordered to match job priority and terminology
+✓ Professional summary reads like it was written specifically for this job
+✓ Quantified achievements and metrics are included wherever possible
+✓ Action verbs and language patterns match the job description
+✓ All sections work together to tell a cohesive story of job readiness
 
 Original Resume Context:
 ${resumeContent}
@@ -621,29 +711,128 @@ Target Job Title: ${job_title}
 Job Description:
 ${job_description}
 
-${additional_context ? `Additional Context: ${additional_context}` : ""}
+${
+  additional_context
+    ? `Additional Context: ${JSON.stringify(additional_context)}`
+    : ""
+}
 
-Generate a tailored resume that maximizes the candidate's chances of getting an interview for this specific role while preserving the integrity of the original information.`;
+EXECUTE THE COMPREHENSIVE TAILORING STRATEGY: Generate a resume that transforms this candidate into the ideal applicant for this specific role through strategic repositioning, enhanced bullet points, and keyword optimization while maintaining complete factual accuracy.`;
 
-    // Make API call to OpenAI
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content:
-            "Please generate a tailored resume based on the provided information.",
-        },
-      ],
-      functions: [GENERATE_TAILORED_RESUME_SCHEMA],
-      function_call: { name: "generate_tailored_resume" },
-      temperature: 0.7,
-      max_tokens: 4000,
-    });
+    // Helper function for making OpenAI API calls with retry logic
+    const makeOpenAICallWithRetry = async (
+      maxRetries = 3,
+      baseDelay = 1000
+    ) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(
+            `Attempt ${attempt}/${maxRetries} - Making OpenAI API call...`
+          );
+
+          const completion = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt,
+              },
+              {
+                role: "user",
+                content:
+                  "Please generate a tailored resume based on the provided information.",
+              },
+            ],
+            functions: [GENERATE_TAILORED_RESUME_SCHEMA],
+            function_call: { name: "generate_tailored_resume" },
+            temperature: 0.2,
+            max_tokens: 16384,
+          });
+
+          console.log(`OpenAI API call successful on attempt ${attempt}`);
+          return completion;
+        } catch (error: any) {
+          console.error(`Attempt ${attempt} failed:`, error.message);
+
+          // Handle rate limit errors (429)
+          if (error.status === 429) {
+            if (attempt === maxRetries) {
+              throw new Error(
+                `Rate limit exceeded after ${maxRetries} attempts. Please try again later.`
+              );
+            }
+
+            // Extract retry delay from headers
+            let waitMs = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+
+            if (error.headers && error.headers["retry-after"]) {
+              // Use the exact retry-after value if provided
+              waitMs = parseFloat(error.headers["retry-after"]) * 1000;
+            } else if (error.headers && error.headers["retry-after-ms"]) {
+              // Some APIs provide retry-after-ms
+              waitMs = parseFloat(error.headers["retry-after-ms"]);
+            }
+
+            console.log(
+              `Rate limit hit. Waiting ${waitMs}ms before retry ${
+                attempt + 1
+              }...`
+            );
+            await new Promise((resolve) => setTimeout(resolve, waitMs));
+            continue;
+          }
+
+          // Handle other OpenAI errors
+          if (error.status === 400) {
+            throw new Error(`Invalid request: ${error.message}`);
+          } else if (error.status === 401) {
+            throw new Error(
+              `Authentication failed: Please check your OpenAI API key`
+            );
+          } else if (error.status === 403) {
+            throw new Error(`Access forbidden: Insufficient permissions`);
+          } else if (error.status === 500) {
+            // Server errors - retry with exponential backoff
+            if (attempt === maxRetries) {
+              throw new Error(
+                `OpenAI server error after ${maxRetries} attempts: ${error.message}`
+              );
+            }
+
+            const waitMs = baseDelay * Math.pow(2, attempt - 1);
+            console.log(
+              `Server error. Waiting ${waitMs}ms before retry ${attempt + 1}...`
+            );
+            await new Promise((resolve) => setTimeout(resolve, waitMs));
+            continue;
+          } else if (error.status >= 500) {
+            // Other server errors
+            if (attempt === maxRetries) {
+              throw new Error(
+                `Server error after ${maxRetries} attempts: ${error.message}`
+              );
+            }
+
+            const waitMs = baseDelay * Math.pow(2, attempt - 1);
+            console.log(
+              `Server error ${error.status}. Waiting ${waitMs}ms before retry ${
+                attempt + 1
+              }...`
+            );
+            await new Promise((resolve) => setTimeout(resolve, waitMs));
+            continue;
+          }
+
+          // For all other errors, don't retry
+          throw error;
+        }
+      }
+
+      throw new Error(`Failed after ${maxRetries} attempts`);
+    };
+
+    // Make API call to OpenAI with retry logic
+    const completion = await makeOpenAICallWithRetry();
 
     // Extract the function call response
     const functionCall = completion.choices[0].message.function_call;
@@ -673,13 +862,45 @@ Generate a tailored resume that maximizes the candidate's chances of getting an 
   } catch (error: any) {
     console.error("Error generating tailored resume:", error);
 
+    // Handle specific error types with better user messaging
+    let errorMessage = "Failed to generate tailored resume";
+    let statusCode = 500;
+
+    if (error.message.includes("Rate limit exceeded")) {
+      errorMessage =
+        "API rate limit exceeded. Please wait a moment and try again.";
+      statusCode = 429;
+    } else if (error.message.includes("Authentication failed")) {
+      errorMessage = "API authentication error. Please contact support.";
+      statusCode = 401;
+    } else if (error.message.includes("Invalid request")) {
+      errorMessage = "Invalid request format. Please check your input data.";
+      statusCode = 400;
+    } else if (error.message.includes("Server error")) {
+      errorMessage =
+        "Temporary server error. Please try again in a few minutes.";
+      statusCode = 502;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Failed to generate tailored resume",
-        details: error.response?.data || null,
+        error: errorMessage,
+        details:
+          process.env.NODE_ENV === "development"
+            ? {
+                originalError: error.message,
+                stack: error.stack,
+                response: error.response?.data,
+              }
+            : null,
+        retryable:
+          error.message.includes("Rate limit") ||
+          error.message.includes("Server error"),
       },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }
@@ -690,7 +911,7 @@ export async function GET() {
     endpoint: "/api/generate-tailored-resume",
     method: "POST",
     description:
-      "Generate a tailored resume based on job posting and original resume with intelligent content analysis",
+      "Generate a comprehensively tailored resume with strategic job-specific repositioning, enhanced work experience bullets, optimized job titles, and ATS-friendly keyword integration",
     required_fields: [
       "job_title",
       "job_description",
@@ -698,14 +919,26 @@ export async function GET() {
     ],
     optional_fields: ["additional_context"],
     new_features: {
+      comprehensive_tailoring:
+        "Every work experience bullet is strategically rewritten for maximum job relevance",
+      job_title_enhancement:
+        "Job titles are thoughtfully enhanced to show career progression alignment",
+      strategic_skill_reordering:
+        "Skills prioritized and reordered to match exact job requirements and terminology",
+      quantified_achievements:
+        "Focus on measurable impact and results rather than just job duties",
+      keyword_optimization:
+        "Seamless integration of job description keywords throughout all sections",
+      ats_optimization:
+        "Resume structured for maximum ATS compatibility and keyword density",
       source_content_analysis:
         "Analyzes what contact information and sections are present in the original resume",
       data_preservation:
         "Only includes contact fields that exist in the original resume text",
       fabrication_prevention:
         "Prevents AI from inventing missing email, phone, or other contact details",
-      professional_summary_always_generated:
-        "Professional summary is always generated to align candidate's skillset with job requirements",
+      professional_summary_optimization:
+        "Professional summary crafted as compelling elevator pitch for specific target role",
     },
     example_request: {
       job_title: "Senior Software Engineer",
