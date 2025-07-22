@@ -4,13 +4,31 @@ declare module "mammoth/mammoth.browser" {
     messages: any[];
   }
 
+  interface ConvertOptions {
+    arrayBuffer: ArrayBuffer;
+    includeEmbeddedStyleMap?: boolean;
+    includeDefaultStyleMap?: boolean;
+    transformDocument?: (document: any) => any;
+    styleMap?: string[];
+    ignoreEmptyParagraphs?: boolean;
+    convertImage?: (image: any) => any;
+    idPrefix?: string;
+  }
+
+  interface ExtractOptions {
+    arrayBuffer: ArrayBuffer;
+    includeEmbeddedStyleMap?: boolean;
+    includeDefaultStyleMap?: boolean;
+  }
+
   interface Mammoth {
-    extractRawText(options: {
-      arrayBuffer: ArrayBuffer;
-    }): Promise<ExtractResult>;
-    convertToHtml(options: {
-      arrayBuffer: ArrayBuffer;
-    }): Promise<ExtractResult>;
+    extractRawText(options: ExtractOptions): Promise<ExtractResult>;
+    convertToHtml(options: ConvertOptions): Promise<ExtractResult>;
+    convertToMarkdown(options: ConvertOptions): Promise<ExtractResult>;
+    images?: {
+      imgElement: (alt: string) => any;
+      dataUri: (alt: string) => any;
+    };
   }
 
   const mammoth: Mammoth;

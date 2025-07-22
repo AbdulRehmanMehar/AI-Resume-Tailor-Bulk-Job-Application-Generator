@@ -39,50 +39,94 @@ const FONT_SIZES = {
 
 interface TailoredResumeData {
   full_name: string;
+  source_content_analysis: {
+    has_email: boolean;
+    has_phone: boolean;
+    has_location: boolean;
+    has_linkedin: boolean;
+    has_github: boolean;
+    has_social_links: boolean;
+    has_relocation_willingness: boolean;
+    has_professional_summary?: boolean; // Always true, but kept for compatibility
+    has_skills: boolean;
+    has_work_experience: boolean;
+    has_education: boolean;
+    has_certifications: boolean;
+    has_projects: boolean;
+    has_languages: boolean;
+    has_awards: boolean;
+  };
   contact_information: {
-    email: string;
-    phone: string;
+    email?: string;
+    phone?: string;
     location?: string;
     linkedin?: string;
+    github?: string;
     website?: string;
+    willing_to_relocate?: boolean;
   };
   professional_summary: string;
   skills: string[];
   work_experience: Array<{
-    job_title: string;
-    company: string;
-    location: string;
-    start_date: string;
-    end_date: string | null;
-    responsibilities: string[];
+    has_job_title?: boolean;
+    has_company?: boolean;
+    has_location?: boolean;
+    has_start_date?: boolean;
+    has_end_date?: boolean;
+    has_responsibilities?: boolean;
+    job_title?: string;
+    company?: string;
+    location?: string;
+    start_date?: string;
+    end_date?: string | null;
+    responsibilities?: string[];
   }>;
   education: Array<{
-    degree: string;
-    institution: string;
-    location: string;
-    start_year: number;
-    end_year: number | null;
+    has_degree?: boolean;
+    has_institution?: boolean;
+    has_location?: boolean;
+    has_start_year?: boolean;
+    has_end_year?: boolean;
+    has_additional_details?: boolean;
+    degree?: string;
+    institution?: string;
+    location?: string;
+    start_year?: number;
+    end_year?: number | null;
     additional_details?: string;
   }>;
   certifications?: Array<{
-    name: string;
-    issuer: string;
-    year: number;
+    has_name?: boolean;
+    has_issuer?: boolean;
+    has_year?: boolean;
+    has_credential_url?: boolean;
+    name?: string;
+    issuer?: string;
+    year?: number;
     credential_url?: string;
   }>;
   projects?: Array<{
-    title: string;
-    description: string;
+    has_title?: boolean;
+    has_description?: boolean;
+    has_url?: boolean;
+    title?: string;
+    description?: string;
     url?: string;
   }>;
   languages?: Array<{
-    language: string;
-    proficiency: string;
+    has_language?: boolean;
+    has_proficiency?: boolean;
+    language?: string;
+    proficiency?: string;
   }>;
   awards?: Array<{
-    title: string;
-    issuer: string;
-    year: number;
+    has_title?: boolean;
+    has_issuer?: boolean;
+    has_year?: boolean;
+    has_description?: boolean;
+    title?: string;
+    issuer?: string;
+    year?: number;
     description?: string;
   }>;
 }
@@ -110,11 +154,14 @@ export function generateModernResumeDocx(
     })
   );
 
-  // Build contact information dynamically - only include available info
+  // Build contact information dynamically - only include info that was in original resume
   const contactParts: TextRun[] = [];
 
-  // Email is required
-  if (resumeData.contact_information.email) {
+  // Email - only if detected in original resume
+  if (
+    resumeData.source_content_analysis.has_email &&
+    resumeData.contact_information.email
+  ) {
     contactParts.push(
       new TextRun({
         text: resumeData.contact_information.email,
@@ -125,8 +172,11 @@ export function generateModernResumeDocx(
     );
   }
 
-  // Phone (optional)
-  if (resumeData.contact_information.phone) {
+  // Phone - only if detected in original resume
+  if (
+    resumeData.source_content_analysis.has_phone &&
+    resumeData.contact_information.phone
+  ) {
     if (contactParts.length > 0) {
       contactParts.push(
         new TextRun({
@@ -147,8 +197,11 @@ export function generateModernResumeDocx(
     );
   }
 
-  // Location (optional)
-  if (resumeData.contact_information.location?.trim()) {
+  // Location - only if detected in original resume
+  if (
+    resumeData.source_content_analysis.has_location &&
+    resumeData.contact_information.location?.trim()
+  ) {
     if (contactParts.length > 0) {
       contactParts.push(
         new TextRun({
@@ -169,8 +222,11 @@ export function generateModernResumeDocx(
     );
   }
 
-  // LinkedIn (optional)
-  if (resumeData.contact_information.linkedin?.trim()) {
+  // LinkedIn - only if detected in original resume
+  if (
+    resumeData.source_content_analysis.has_linkedin &&
+    resumeData.contact_information.linkedin?.trim()
+  ) {
     if (contactParts.length > 0) {
       contactParts.push(
         new TextRun({
@@ -191,8 +247,36 @@ export function generateModernResumeDocx(
     );
   }
 
-  // Website/Portfolio (optional)
-  if (resumeData.contact_information.website?.trim()) {
+  // GitHub - only if detected in original resume
+  if (
+    resumeData.source_content_analysis.has_github &&
+    resumeData.contact_information.github?.trim()
+  ) {
+    if (contactParts.length > 0) {
+      contactParts.push(
+        new TextRun({
+          text: " • ",
+          size: FONT_SIZES.body,
+          color: COLORS.secondary,
+          font: "Calibri",
+        })
+      );
+    }
+    contactParts.push(
+      new TextRun({
+        text: "GitHub",
+        size: FONT_SIZES.body,
+        color: COLORS.primary,
+        font: "Calibri",
+      })
+    );
+  }
+
+  // Website/Portfolio - only if social links detected in original resume
+  if (
+    resumeData.source_content_analysis.has_social_links &&
+    resumeData.contact_information.website?.trim()
+  ) {
     if (contactParts.length > 0) {
       contactParts.push(
         new TextRun({
@@ -213,6 +297,32 @@ export function generateModernResumeDocx(
     );
   }
 
+  // Relocation willingness - only if mentioned in original resume
+  if (
+    resumeData.source_content_analysis.has_relocation_willingness &&
+    resumeData.contact_information.willing_to_relocate
+  ) {
+    if (contactParts.length > 0) {
+      contactParts.push(
+        new TextRun({
+          text: " • ",
+          size: FONT_SIZES.body,
+          color: COLORS.secondary,
+          font: "Calibri",
+        })
+      );
+    }
+    contactParts.push(
+      new TextRun({
+        text: "Open to relocation",
+        size: FONT_SIZES.body,
+        color: COLORS.accent,
+        font: "Calibri",
+        italics: true,
+      })
+    );
+  }
+
   // Add contact information paragraph only if we have contact parts
   if (contactParts.length > 0) {
     children.push(
@@ -224,7 +334,7 @@ export function generateModernResumeDocx(
     );
   }
 
-  // Professional Summary Section - only if content exists
+  // Professional Summary Section - always included since we always generate it
   if (resumeData.professional_summary?.trim()) {
     children.push(
       createSectionHeader("PROFESSIONAL SUMMARY"),
@@ -247,8 +357,12 @@ export function generateModernResumeDocx(
     );
   }
 
-  // Skills Section
-  if (resumeData.skills && resumeData.skills.length > 0) {
+  // Skills Section - only if detected in original resume
+  if (
+    resumeData.source_content_analysis.has_skills &&
+    resumeData.skills &&
+    resumeData.skills.length > 0
+  ) {
     children.push(createSectionHeader("CORE COMPETENCIES"));
 
     // Create skills in a flowing format with bullet points
@@ -272,71 +386,118 @@ export function generateModernResumeDocx(
     );
   }
 
-  // Work Experience Section
-  if (resumeData.work_experience && resumeData.work_experience.length > 0) {
+  // Work Experience Section - only if detected in original resume
+  if (
+    resumeData.source_content_analysis.has_work_experience &&
+    resumeData.work_experience &&
+    resumeData.work_experience.length > 0
+  ) {
     // Filter out work experience entries that don't have required information
     const validWorkExperience = resumeData.work_experience.filter(
-      (job) => job.job_title?.trim() && job.company?.trim()
+      (job) =>
+        (job.has_job_title && job.job_title?.trim()) ||
+        (job.has_company && job.company?.trim())
     );
 
     if (validWorkExperience.length > 0) {
       children.push(createSectionHeader("PROFESSIONAL EXPERIENCE"));
 
       validWorkExperience.forEach((job, index) => {
-        const dateRange = `${job.start_date || "Unknown"} - ${
-          job.end_date || "Present"
-        }`;
+        // Build date range - only if dates are available
+        let dateRange = "";
+        if (job.has_start_date && job.start_date) {
+          dateRange = job.start_date;
+          if (job.has_end_date) {
+            dateRange += ` - ${job.end_date || "Present"}`;
+          }
+        } else if (job.has_end_date && job.end_date) {
+          dateRange = `Until ${job.end_date}`;
+        }
 
-        // Job title and company
-        children.push(
-          new Paragraph({
-            children: [
+        // Build job title and company line - only include what's available
+        const titleParts: TextRun[] = [];
+
+        if (job.has_job_title && job.job_title?.trim()) {
+          titleParts.push(
+            new TextRun({
+              text: job.job_title,
+              size: FONT_SIZES.subheader,
+              bold: true,
+              color: COLORS.accent,
+              font: "Calibri",
+            })
+          );
+        }
+
+        if (job.has_company && job.company?.trim()) {
+          if (titleParts.length > 0) {
+            titleParts.push(
               new TextRun({
-                text: job.job_title,
+                text: " | ",
                 size: FONT_SIZES.subheader,
-                bold: true,
-                color: COLORS.accent,
-                font: "Calibri",
-              }),
-              new TextRun({
-                text: ` | ${job.company}`,
-                size: FONT_SIZES.subheader,
-                color: COLORS.primary,
-                font: "Calibri",
-              }),
-            ],
-            spacing: { after: 100 },
-            indent: {
-              left: convertInchesToTwip(0.1),
-            },
-          })
-        );
-
-        // Location and date range - build dynamically
-        const locationAndDateParts: string[] = [];
-        if (job.location?.trim()) locationAndDateParts.push(job.location);
-        locationAndDateParts.push(dateRange);
-
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: locationAndDateParts.join(" | "),
-                size: FONT_SIZES.small,
                 color: COLORS.secondary,
                 font: "Calibri",
-                italics: true,
-              }),
-            ],
-            spacing: { after: 120 },
-            indent: {
-              left: convertInchesToTwip(0.1),
-            },
-          })
-        );
+              })
+            );
+          }
+          titleParts.push(
+            new TextRun({
+              text: job.company,
+              size: FONT_SIZES.subheader,
+              color: COLORS.primary,
+              font: "Calibri",
+            })
+          );
+        }
 
-        // Responsibilities - only render if they exist and have content
-        if (job.responsibilities && Array.isArray(job.responsibilities)) {
+        // Only add title/company line if we have at least one of them
+        if (titleParts.length > 0) {
+          children.push(
+            new Paragraph({
+              children: titleParts,
+              spacing: { after: 100 },
+              indent: {
+                left: convertInchesToTwip(0.1),
+              },
+            })
+          );
+        }
+
+        // Location and date range - build dynamically based on what's available
+        const locationAndDateParts: string[] = [];
+        if (job.has_location && job.location?.trim()) {
+          locationAndDateParts.push(job.location);
+        }
+        if (dateRange) {
+          locationAndDateParts.push(dateRange);
+        }
+
+        if (locationAndDateParts.length > 0) {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: locationAndDateParts.join(" | "),
+                  size: FONT_SIZES.small,
+                  color: COLORS.secondary,
+                  font: "Calibri",
+                  italics: true,
+                }),
+              ],
+              spacing: { after: 120 },
+              indent: {
+                left: convertInchesToTwip(0.1),
+              },
+            })
+          );
+        }
+
+        // Responsibilities - only render if flag is true and data exists
+        if (
+          job.has_responsibilities &&
+          job.responsibilities &&
+          Array.isArray(job.responsibilities)
+        ) {
           const validResponsibilities = job.responsibilities.filter(
             (resp) => resp && typeof resp === "string" && resp.trim()
           );
@@ -388,58 +549,91 @@ export function generateModernResumeDocx(
         })
       );
     }
-  } // Education Section - only if data exists
-  if (resumeData.education && resumeData.education.length > 0) {
+  }
+
+  // Education Section - only if data exists AND detected in original resume
+  if (
+    resumeData.source_content_analysis.has_education &&
+    resumeData.education &&
+    resumeData.education.length > 0
+  ) {
     children.push(createSectionHeader("EDUCATION"));
 
     resumeData.education.forEach((edu) => {
-      const yearRange = `${edu.start_year} - ${edu.end_year || "Present"}`;
-
       // Only render if we have basic required information
-      if (edu.degree?.trim() && edu.institution?.trim()) {
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: edu.degree,
-                size: FONT_SIZES.subheader,
-                bold: true,
-                color: COLORS.accent,
-                font: "Calibri",
-              }),
-            ],
-            spacing: { after: 100 },
-            indent: {
-              left: convertInchesToTwip(0.1),
-            },
-          })
-        );
+      if (
+        (edu.has_degree && edu.degree?.trim()) ||
+        (edu.has_institution && edu.institution?.trim())
+      ) {
+        // Degree line - only if available
+        if (edu.has_degree && edu.degree?.trim()) {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: edu.degree,
+                  size: FONT_SIZES.subheader,
+                  bold: true,
+                  color: COLORS.accent,
+                  font: "Calibri",
+                }),
+              ],
+              spacing: { after: 100 },
+              indent: {
+                left: convertInchesToTwip(0.1),
+              },
+            })
+          );
+        }
 
-        // Build institution line dynamically
+        // Build institution line dynamically based on available fields
         const institutionParts: string[] = [];
-        if (edu.institution?.trim()) institutionParts.push(edu.institution);
-        if (edu.location?.trim()) institutionParts.push(edu.location);
-        institutionParts.push(yearRange);
+        if (edu.has_institution && edu.institution?.trim()) {
+          institutionParts.push(edu.institution);
+        }
+        if (edu.has_location && edu.location?.trim()) {
+          institutionParts.push(edu.location);
+        }
 
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: institutionParts.join(" | "),
-                size: FONT_SIZES.body,
-                color: COLORS.secondary,
-                font: "Calibri",
-              }),
-            ],
-            spacing: { after: edu.additional_details?.trim() ? 100 : 180 },
-            indent: {
-              left: convertInchesToTwip(0.1),
-            },
-          })
-        );
+        // Year range - only if available
+        if (edu.has_start_year && edu.start_year) {
+          const yearRange =
+            edu.has_end_year && edu.end_year
+              ? `${edu.start_year} - ${edu.end_year}`
+              : edu.has_end_year
+              ? `${edu.start_year} - Present`
+              : `${edu.start_year}`;
+          institutionParts.push(yearRange);
+        } else if (edu.has_end_year && edu.end_year) {
+          institutionParts.push(`Graduated ${edu.end_year}`);
+        }
 
-        // Additional details (optional)
-        if (edu.additional_details?.trim()) {
+        if (institutionParts.length > 0) {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: institutionParts.join(" | "),
+                  size: FONT_SIZES.body,
+                  color: COLORS.secondary,
+                  font: "Calibri",
+                }),
+              ],
+              spacing: {
+                after:
+                  edu.has_additional_details && edu.additional_details?.trim()
+                    ? 100
+                    : 180,
+              },
+              indent: {
+                left: convertInchesToTwip(0.1),
+              },
+            })
+          );
+        }
+
+        // Additional details - only if flag is true and content exists
+        if (edu.has_additional_details && edu.additional_details?.trim()) {
           children.push(
             new Paragraph({
               children: [
@@ -460,41 +654,67 @@ export function generateModernResumeDocx(
         }
       }
     });
-  } // Certifications Section - only if data exists and has required fields
-  if (resumeData.certifications && resumeData.certifications.length > 0) {
+  }
+
+  // Certifications Section - only if data exists and detected in original resume
+  if (
+    resumeData.source_content_analysis.has_certifications &&
+    resumeData.certifications &&
+    resumeData.certifications.length > 0
+  ) {
     // Filter out certifications that don't have required information
     const validCertifications = resumeData.certifications.filter(
-      (cert) => cert.name?.trim() && cert.issuer?.trim() && cert.year
+      (cert) =>
+        (cert.has_name && cert.name?.trim()) ||
+        (cert.has_issuer && cert.issuer?.trim()) ||
+        (cert.has_year && cert.year)
     );
 
     if (validCertifications.length > 0) {
       children.push(createSectionHeader("CERTIFICATIONS"));
 
       validCertifications.forEach((cert) => {
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "• ",
-                size: FONT_SIZES.body,
-                color: COLORS.primary,
-                font: "Calibri",
-                bold: true,
-              }),
-              new TextRun({
-                text: `${cert.name} - ${cert.issuer} (${cert.year})`,
-                size: FONT_SIZES.body,
-                color: COLORS.text,
-                font: "Calibri",
-              }),
-            ],
-            spacing: { after: 100 },
-            indent: {
-              left: convertInchesToTwip(0.3),
-              hanging: convertInchesToTwip(0.2),
-            },
-          })
-        );
+        // Build certification text dynamically based on available fields
+        const certParts: string[] = [];
+
+        if (cert.has_name && cert.name?.trim()) {
+          certParts.push(cert.name);
+        }
+
+        if (cert.has_issuer && cert.issuer?.trim()) {
+          certParts.push(cert.issuer);
+        }
+
+        if (cert.has_year && cert.year) {
+          certParts.push(`(${cert.year})`);
+        }
+
+        if (certParts.length > 0) {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "• ",
+                  size: FONT_SIZES.body,
+                  color: COLORS.primary,
+                  font: "Calibri",
+                  bold: true,
+                }),
+                new TextRun({
+                  text: certParts.join(" - "),
+                  size: FONT_SIZES.body,
+                  color: COLORS.text,
+                  font: "Calibri",
+                }),
+              ],
+              spacing: { after: 100 },
+              indent: {
+                left: convertInchesToTwip(0.3),
+                hanging: convertInchesToTwip(0.2),
+              },
+            })
+          );
+        }
       });
 
       children.push(
@@ -506,48 +726,87 @@ export function generateModernResumeDocx(
     }
   }
 
-  // Projects Section - only if data exists and has required fields
-  if (resumeData.projects && resumeData.projects.length > 0) {
+  // Projects Section - only if data exists and detected in original resume
+  if (
+    resumeData.source_content_analysis.has_projects &&
+    resumeData.projects &&
+    resumeData.projects.length > 0
+  ) {
     // Filter out projects that don't have required information
     const validProjects = resumeData.projects.filter(
-      (project) => project.title?.trim() && project.description?.trim()
+      (project) =>
+        (project.has_title && project.title?.trim()) ||
+        (project.has_description && project.description?.trim())
     );
 
     if (validProjects.length > 0) {
       children.push(createSectionHeader("KEY PROJECTS"));
 
       validProjects.forEach((project) => {
-        children.push(
-          new Paragraph({
-            children: [
+        const projectParts: TextRun[] = [];
+
+        // Bullet point
+        projectParts.push(
+          new TextRun({
+            text: "• ",
+            size: FONT_SIZES.body,
+            color: COLORS.primary,
+            font: "Calibri",
+            bold: true,
+          })
+        );
+
+        // Project title - only if available
+        if (project.has_title && project.title?.trim()) {
+          projectParts.push(
+            new TextRun({
+              text: `${project.title}`,
+              size: FONT_SIZES.body,
+              color: COLORS.accent,
+              font: "Calibri",
+              bold: true,
+            })
+          );
+
+          // Add separator if we also have description
+          if (project.has_description && project.description?.trim()) {
+            projectParts.push(
               new TextRun({
-                text: "• ",
-                size: FONT_SIZES.body,
-                color: COLORS.primary,
-                font: "Calibri",
-                bold: true,
-              }),
-              new TextRun({
-                text: `${project.title}: `,
+                text: ": ",
                 size: FONT_SIZES.body,
                 color: COLORS.accent,
                 font: "Calibri",
                 bold: true,
-              }),
-              new TextRun({
-                text: project.description,
-                size: FONT_SIZES.body,
-                color: COLORS.text,
-                font: "Calibri",
-              }),
-            ],
-            spacing: { after: 100 },
-            indent: {
-              left: convertInchesToTwip(0.3),
-              hanging: convertInchesToTwip(0.2),
-            },
-          })
-        );
+              })
+            );
+          }
+        }
+
+        // Project description - only if available
+        if (project.has_description && project.description?.trim()) {
+          projectParts.push(
+            new TextRun({
+              text: project.description,
+              size: FONT_SIZES.body,
+              color: COLORS.text,
+              font: "Calibri",
+            })
+          );
+        }
+
+        if (projectParts.length > 1) {
+          // More than just the bullet
+          children.push(
+            new Paragraph({
+              children: projectParts,
+              spacing: { after: 100 },
+              indent: {
+                left: convertInchesToTwip(0.3),
+                hanging: convertInchesToTwip(0.2),
+              },
+            })
+          );
+        }
       });
 
       children.push(
@@ -559,47 +818,86 @@ export function generateModernResumeDocx(
     }
   }
 
-  // Languages Section - only if data exists and has required fields
-  if (resumeData.languages && resumeData.languages.length > 0) {
+  // Languages Section - only if data exists and detected in original resume
+  if (
+    resumeData.source_content_analysis.has_languages &&
+    resumeData.languages &&
+    resumeData.languages.length > 0
+  ) {
     const validLanguages = resumeData.languages.filter(
-      (lang) => lang.language?.trim() && lang.proficiency?.trim()
+      (lang) =>
+        (lang.has_language && lang.language?.trim()) ||
+        (lang.has_proficiency && lang.proficiency?.trim())
     );
 
     if (validLanguages.length > 0) {
       children.push(createSectionHeader("LANGUAGES"));
 
       validLanguages.forEach((lang) => {
-        children.push(
-          new Paragraph({
-            children: [
+        const langParts: TextRun[] = [];
+
+        // Bullet point
+        langParts.push(
+          new TextRun({
+            text: "• ",
+            size: FONT_SIZES.body,
+            color: COLORS.primary,
+            font: "Calibri",
+            bold: true,
+          })
+        );
+
+        // Language name - only if available
+        if (lang.has_language && lang.language?.trim()) {
+          langParts.push(
+            new TextRun({
+              text: lang.language,
+              size: FONT_SIZES.body,
+              color: COLORS.accent,
+              font: "Calibri",
+              bold: true,
+            })
+          );
+
+          // Add separator if we also have proficiency
+          if (lang.has_proficiency && lang.proficiency?.trim()) {
+            langParts.push(
               new TextRun({
-                text: "• ",
-                size: FONT_SIZES.body,
-                color: COLORS.primary,
-                font: "Calibri",
-                bold: true,
-              }),
-              new TextRun({
-                text: `${lang.language}: `,
+                text: ": ",
                 size: FONT_SIZES.body,
                 color: COLORS.accent,
                 font: "Calibri",
                 bold: true,
-              }),
-              new TextRun({
-                text: lang.proficiency,
-                size: FONT_SIZES.body,
-                color: COLORS.text,
-                font: "Calibri",
-              }),
-            ],
-            spacing: { after: 100 },
-            indent: {
-              left: convertInchesToTwip(0.3),
-              hanging: convertInchesToTwip(0.2),
-            },
-          })
-        );
+              })
+            );
+          }
+        }
+
+        // Proficiency - only if available
+        if (lang.has_proficiency && lang.proficiency?.trim()) {
+          langParts.push(
+            new TextRun({
+              text: lang.proficiency,
+              size: FONT_SIZES.body,
+              color: COLORS.text,
+              font: "Calibri",
+            })
+          );
+        }
+
+        if (langParts.length > 1) {
+          // More than just the bullet
+          children.push(
+            new Paragraph({
+              children: langParts,
+              spacing: { after: 100 },
+              indent: {
+                left: convertInchesToTwip(0.3),
+                hanging: convertInchesToTwip(0.2),
+              },
+            })
+          );
+        }
       });
 
       children.push(
@@ -611,51 +909,85 @@ export function generateModernResumeDocx(
     }
   }
 
-  // Awards Section - only if data exists and has required fields
-  if (resumeData.awards && resumeData.awards.length > 0) {
+  // Awards Section - only if data exists and detected in original resume
+  if (
+    resumeData.source_content_analysis.has_awards &&
+    resumeData.awards &&
+    resumeData.awards.length > 0
+  ) {
     const validAwards = resumeData.awards.filter(
-      (award) => award.title?.trim() && award.issuer?.trim() && award.year
+      (award) =>
+        (award.has_title && award.title?.trim()) ||
+        (award.has_issuer && award.issuer?.trim()) ||
+        (award.has_year && award.year)
     );
 
     if (validAwards.length > 0) {
       children.push(createSectionHeader("AWARDS & HONORS"));
 
       validAwards.forEach((award) => {
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "• ",
-                size: FONT_SIZES.body,
-                color: COLORS.primary,
-                font: "Calibri",
-                bold: true,
-              }),
-              new TextRun({
-                text: `${award.title} - ${award.issuer} (${award.year})`,
-                size: FONT_SIZES.body,
-                color: COLORS.accent,
-                font: "Calibri",
-                bold: true,
-              }),
-              ...(award.description?.trim()
-                ? [
-                    new TextRun({
-                      text: `: ${award.description}`,
-                      size: FONT_SIZES.body,
-                      color: COLORS.text,
-                      font: "Calibri",
-                    }),
-                  ]
-                : []),
-            ],
-            spacing: { after: 100 },
-            indent: {
-              left: convertInchesToTwip(0.3),
-              hanging: convertInchesToTwip(0.2),
-            },
+        const awardParts: TextRun[] = [];
+
+        // Bullet point
+        awardParts.push(
+          new TextRun({
+            text: "• ",
+            size: FONT_SIZES.body,
+            color: COLORS.primary,
+            font: "Calibri",
+            bold: true,
           })
         );
+
+        // Build the main award line with available information
+        const mainParts: string[] = [];
+        if (award.has_title && award.title?.trim()) {
+          mainParts.push(award.title);
+        }
+        if (award.has_issuer && award.issuer?.trim()) {
+          mainParts.push(award.issuer);
+        }
+        if (award.has_year && award.year) {
+          mainParts.push(`(${award.year})`);
+        }
+
+        if (mainParts.length > 0) {
+          awardParts.push(
+            new TextRun({
+              text: mainParts.join(" - "),
+              size: FONT_SIZES.body,
+              color: COLORS.accent,
+              font: "Calibri",
+              bold: true,
+            })
+          );
+        }
+
+        // Award description - only if available
+        if (award.has_description && award.description?.trim()) {
+          awardParts.push(
+            new TextRun({
+              text: `: ${award.description}`,
+              size: FONT_SIZES.body,
+              color: COLORS.text,
+              font: "Calibri",
+            })
+          );
+        }
+
+        if (awardParts.length > 1) {
+          // More than just the bullet
+          children.push(
+            new Paragraph({
+              children: awardParts,
+              spacing: { after: 100 },
+              indent: {
+                left: convertInchesToTwip(0.3),
+                hanging: convertInchesToTwip(0.2),
+              },
+            })
+          );
+        }
       });
     }
   }

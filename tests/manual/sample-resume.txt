@@ -1,0 +1,63 @@
+John Doe
+Senior Software Engineer
+Email: john.doe@example.com
+Phone: (555) 123-4567
+Location: San Francisco, CA
+
+PROFESSIONAL SUMMARY:
+Experienced software engineer with 8+ years of experience in full-stack development, specializing in React, Node.js, and cloud technologies. Proven track record of leading development teams and delivering scalable applications.
+
+TECHNICAL SKILLS:
+- Frontend: React, TypeScript, JavaScript, HTML5, CSS3, Vue.js
+- Backend: Node.js, Python, Express.js, RESTful APIs, GraphQL
+- Databases: PostgreSQL, MongoDB, Redis, MySQL
+- Cloud: AWS (EC2, S3, Lambda), Docker, Kubernetes
+- Tools: Git, Jenkins, JIRA, Slack
+
+WORK EXPERIENCE:
+
+Senior Software Engineer | TechCorp Inc. | San Francisco, CA | Jan 2020 - Present
+• Led a team of 5 developers in building a customer-facing web application serving 100K+ users
+• Implemented microservices architecture using Node.js and AWS Lambda, reducing response time by 40%
+• Collaborated with product managers and designers to deliver features ahead of schedule
+• Mentored junior developers and conducted code reviews to maintain code quality
+
+Software Engineer | StartupXYZ | Palo Alto, CA | Jun 2018 - Dec 2019
+• Developed mobile applications using React Native for iOS and Android platforms
+• Built RESTful APIs using Express.js and PostgreSQL database
+• Integrated third-party payment systems and social media authentication
+• Participated in agile development processes and daily standups
+
+Junior Developer | DevSolutions | San Jose, CA | Aug 2016 - May 2018
+• Created responsive web interfaces using HTML5, CSS3, and JavaScript
+• Assisted in database design and optimization for client projects
+• Performed unit testing and debugging to ensure application reliability
+• Collaborated with senior developers on various client projects
+
+EDUCATION:
+
+Bachelor of Science in Computer Science
+University of California, Berkeley | Berkeley, CA | 2016
+GPA: 3.8/4.0
+Relevant Coursework: Data Structures, Algorithms, Database Systems, Software Engineering
+
+PROJECTS:
+
+E-commerce Platform (2022)
+• Built a full-stack e-commerce application using React, Node.js, and PostgreSQL
+• Implemented secure payment processing and user authentication
+• Deployed on AWS with auto-scaling capabilities
+
+Task Management App (2021)
+• Developed a team collaboration tool with real-time updates using Socket.io
+• Created RESTful APIs and integrated with third-party calendar services
+• Used React for frontend and Express.js for backend
+
+CERTIFICATIONS:
+• AWS Certified Developer Associate (2021)
+• Google Cloud Professional Developer (2020)
+
+LANGUAGES:
+• English (Native)
+• Spanish (Professional)
+• Mandarin (Basic)

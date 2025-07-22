@@ -39,6 +39,7 @@ import {
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
+import * as mammoth from "mammoth";
 import {
   downloadTailoredResume,
   generateModernResumeDocx,
@@ -96,6 +97,322 @@ export function BulkJobGenerator({
   }>({ oldResume: null, newResume: null });
 
   const { toast } = useToast();
+
+  // Utility function to extract text from PDF files
+  const extractTextFromPDF = async (file: File): Promise<string> => {
+    try {
+      // Import pdfjs-dist dynamically to avoid SSR issues
+      const pdfjs = await import("pdfjs-dist");
+
+      // Set worker path
+      if (typeof window !== "undefined") {
+        pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+
+      let fullText = "";
+
+      // Extract text from all pages
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const textItems = textContent.items as any[];
+        const pageText = textItems.map((item) => item.str).join(" ");
+        fullText += pageText + "\n";
+      }
+
+      return fullText.trim();
+    } catch (error) {
+      console.error("Error extracting text from PDF:", error);
+      throw new Error("Failed to extract text from PDF file");
+    }
+  };
+
+  // Utility function to extract text from DOCX files
+  // Comprehensive utility function to extract ALL content from DOCX files
+  const extractTextFromDOCX = async (file: File): Promise<string> => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      let extractedContent: string[] = [];
+      let extractionMethods: string[] = [];
+
+      console.log("🔍 Starting comprehensive DOCX extraction...");
+
+      // Method 1: Extract raw text with enhanced options
+      try {
+        const rawTextResult = await mammoth.extractRawText({
+          arrayBuffer,
+        });
+
+        if (rawTextResult.value && rawTextResult.value.trim()) {
+          extractedContent.push("=== RAW TEXT CONTENT ===");
+          extractedContent.push(rawTextResult.value.trim());
+          extractionMethods.push("enhanced raw text");
+
+          if (rawTextResult.messages && rawTextResult.messages.length > 0) {
+            console.log(
+              "Raw text extraction messages:",
+              rawTextResult.messages
+            );
+          }
+        }
+      } catch (rawError) {
+        console.warn("Enhanced raw text extraction failed:", rawError);
+      }
+
+      // Method 2: Convert to HTML with comprehensive options (captures headers, footers, images, etc.)
+      try {
+        const htmlResult = await mammoth.convertToHtml({
+          arrayBuffer,
+        });
+
+        if (htmlResult.value) {
+          // Extract comprehensive text from HTML including all elements
+          let htmlText = "";
+          try {
+            if (typeof document !== "undefined") {
+              const tempDiv = document.createElement("div");
+              tempDiv.innerHTML = htmlResult.value;
+
+              // Extract all text content including from different elements
+              const allTextNodes: string[] = [];
+
+              // Get text from all elements
+              const walker = document.createTreeWalker(
+                tempDiv,
+                NodeFilter.SHOW_TEXT,
+                null
+              );
+
+              let node;
+              while ((node = walker.nextNode())) {
+                const text = node.textContent?.trim();
+                if (text && text.length > 0) {
+                  allTextNodes.push(text);
+                }
+              }
+
+              // Also get text content directly
+              const directText = tempDiv.textContent || tempDiv.innerText || "";
+
+              // Use the more comprehensive extraction
+              htmlText =
+                allTextNodes.length > 0 ? allTextNodes.join(" ") : directText;
+
+              // Also capture image alt texts and other metadata
+              const images = tempDiv.querySelectorAll("img");
+              if (images.length > 0) {
+                const imageTexts: string[] = [];
+                images.forEach((img) => {
+                  const alt = img.getAttribute("alt");
+                  const title = img.getAttribute("title");
+                  if (alt) imageTexts.push(`[Image: ${alt}]`);
+                  if (title && title !== alt)
+                    imageTexts.push(`[Title: ${title}]`);
+                });
+                if (imageTexts.length > 0) {
+                  htmlText +=
+                    "\n\n=== IMAGE CONTENT ===\n" + imageTexts.join("\n");
+                }
+              }
+            } else {
+              // Fallback for server-side rendering
+              htmlText = htmlResult.value
+                .replace(/<[^>]*>/g, " ")
+                .replace(/\s+/g, " ");
+            }
+          } catch (domError) {
+            console.warn("DOM parsing failed, using regex cleanup:", domError);
+            htmlText = htmlResult.value
+              .replace(/<[^>]*>/g, " ")
+              .replace(/\s+/g, " ");
+          }
+
+          if (htmlText && htmlText.trim()) {
+            extractedContent.push("=== HTML CONVERTED CONTENT ===");
+            extractedContent.push(htmlText.trim());
+            extractionMethods.push("comprehensive HTML conversion");
+          }
+
+          if (htmlResult.messages && htmlResult.messages.length > 0) {
+            console.log("HTML conversion messages:", htmlResult.messages);
+          }
+        }
+      } catch (htmlError) {
+        console.warn("HTML conversion failed:", htmlError);
+      }
+
+      // Method 3: Try to convert to Markdown for additional structure preservation
+      try {
+        if ((mammoth as any).convertToMarkdown) {
+          const markdownResult = await (mammoth as any).convertToMarkdown({
+            arrayBuffer,
+          });
+
+          if (markdownResult.value && markdownResult.value.trim()) {
+            extractedContent.push("=== MARKDOWN CONTENT ===");
+            extractedContent.push(markdownResult.value.trim());
+            extractionMethods.push("markdown conversion");
+          }
+        }
+      } catch (markdownError) {
+        console.warn(
+          "Markdown conversion not available or failed:",
+          markdownError
+        );
+      }
+
+      // Method 4: Try direct ZIP parsing for even more comprehensive extraction
+      try {
+        // Import PizZip for direct XML parsing
+        const PizZip = (await import("pizzip")).default;
+        const zip = new PizZip(arrayBuffer);
+
+        // Extract document.xml for main content
+        const documentXml = zip.file("word/document.xml");
+        if (documentXml) {
+          const xmlContent = documentXml.asText();
+          // Basic XML text extraction
+          const xmlText = xmlContent
+            .replace(/<[^>]*>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (xmlText && xmlText.length > 100) {
+            extractedContent.push("=== XML DIRECT CONTENT ===");
+            extractedContent.push(xmlText);
+            extractionMethods.push("direct XML parsing");
+          }
+        }
+
+        // Extract header and footer content
+        const headerFiles = [
+          "word/header1.xml",
+          "word/header2.xml",
+          "word/header3.xml",
+        ];
+        const footerFiles = [
+          "word/footer1.xml",
+          "word/footer2.xml",
+          "word/footer3.xml",
+        ];
+
+        const headerFooterContent: string[] = [];
+
+        [...headerFiles, ...footerFiles].forEach((fileName) => {
+          const file = zip.file(fileName);
+          if (file) {
+            const content = file
+              .asText()
+              .replace(/<[^>]*>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (content && content.length > 0) {
+              headerFooterContent.push(content);
+            }
+          }
+        });
+
+        if (headerFooterContent.length > 0) {
+          extractedContent.push("=== HEADERS & FOOTERS ===");
+          extractedContent.push(headerFooterContent.join("\n"));
+          extractionMethods.push("header/footer extraction");
+        }
+      } catch (zipError) {
+        console.warn("Direct ZIP parsing failed:", zipError);
+      }
+
+      // Combine all extracted content intelligently
+      let finalText = "";
+
+      if (extractedContent.length > 0) {
+        // Join all content with clear separators
+        finalText = extractedContent.join("\n\n").trim();
+
+        // Clean up the combined text
+        finalText = finalText
+          .replace(/\s+/g, " ") // Replace multiple spaces with single space
+          .replace(/\n\s*\n\s*\n/g, "\n\n") // Replace multiple newlines with double newline
+          .replace(/\t/g, " ") // Replace tabs with spaces
+          .replace(/=== [^=]+ ===/g, (match) => "\n\n" + match + "\n") // Format section headers
+          .trim();
+      }
+
+      // Log comprehensive extraction info
+      console.log(`📄 DOCX comprehensive extraction completed!`);
+      console.log(`📊 Methods used: ${extractionMethods.join(", ")}`);
+      console.log(`📏 Total content length: ${finalText.length} characters`);
+      console.log(`🔤 Word count: ${finalText.split(/\s+/).length} words`);
+      console.log(
+        `📝 First 300 characters:\n${finalText.substring(0, 300)}...`
+      );
+
+      // Validate extraction
+      if (!finalText || finalText.trim().length === 0) {
+        throw new Error(
+          "No content could be extracted from the DOCX file. The file may be corrupted, password-protected, or contain only images."
+        );
+      }
+
+      if (finalText.length < 50) {
+        console.warn(
+          "⚠️ Very short content extracted. This may indicate an issue with the DOCX file structure."
+        );
+      }
+
+      // Check for common resume elements
+      const hasEmail =
+        /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/i.test(finalText);
+      const hasPhone = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(finalText);
+      const hasName = finalText.split("\n")[0]?.trim().length > 0;
+
+      console.log(
+        `✅ Content validation: Email(${hasEmail}) Phone(${hasPhone}) Name(${hasName})`
+      );
+
+      return finalText;
+    } catch (error: any) {
+      console.error("💥 Error in comprehensive DOCX extraction:", error);
+      throw new Error(
+        `Failed to extract text from DOCX file: ${
+          error?.message || "Unknown error"
+        }. Please ensure the file is not corrupted or password-protected.`
+      );
+    }
+  };
+
+  // Main function to extract text from any supported file format
+  const extractTextFromFile = async (file: File): Promise<string> => {
+    const fileType = file.type;
+    const fileName = file.name.toLowerCase();
+
+    try {
+      if (fileType === "text/plain" || fileName.endsWith(".txt")) {
+        return await file.text();
+      } else if (fileType === "application/pdf" || fileName.endsWith(".pdf")) {
+        return await extractTextFromPDF(file);
+      } else if (
+        fileType ===
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+        fileName.endsWith(".docx")
+      ) {
+        return await extractTextFromDOCX(file);
+      } else if (fileName.endsWith(".doc")) {
+        throw new Error(
+          "Legacy DOC files are not supported. Please convert to DOCX format."
+        );
+      } else {
+        // Try to read as text for other file types
+        return await file.text();
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Failed to extract text from file: ${file.name}`);
+    }
+  };
 
   // Effect to render DOCX files when preview URLs change
   useEffect(() => {
@@ -238,24 +555,30 @@ export function BulkJobGenerator({
     if (!file) return;
 
     setBaseResume(file);
+    setError(null);
 
-    // Extract text content from the file
-    if (file.type === "text/plain") {
-      const text = await file.text();
-      setBaseResumeContent(text);
-    } else if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
-      // For PDF files, we would need a PDF parser, for now just set filename
-      setBaseResumeContent(`PDF Resume: ${file.name}`);
-    } else if (file.name.endsWith(".docx") || file.name.endsWith(".doc")) {
-      // For Word docs, we would need a doc parser, for now just set filename
-      setBaseResumeContent(`Word Document: ${file.name}`);
-    } else {
-      try {
-        const text = await file.text();
-        setBaseResumeContent(text);
-      } catch (error) {
-        setBaseResumeContent(`Resume File: ${file.name}`);
-      }
+    try {
+      // Use the new text extraction utility
+      const extractedText = await extractTextFromFile(file);
+      setBaseResumeContent(extractedText);
+
+      toast({
+        title: "Resume uploaded successfully",
+        description: `Extracted text from ${file.name}`,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to extract text from file";
+      setError(errorMessage);
+      setBaseResumeContent("");
+
+      toast({
+        title: "Upload failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
     }
   };
 
@@ -357,65 +680,47 @@ export function BulkJobGenerator({
       .map((job) => job.jobTitle);
   };
 
-  // Determine target industry/role based on existing titles
-  const getTargetRole = (): string => {
+  // Determine target industry/role based on existing titles using AI
+  const getTargetRole = async (): Promise<string> => {
     const existingTitles = getExistingJobTitles();
     if (existingTitles.length === 0) return "";
 
-    // Use the first non-empty title as the target role for consistency
-    const firstTitle = existingTitles[0];
-    if (firstTitle) {
-      return firstTitle;
+    // If there's only one title, return it directly
+    if (existingTitles.length === 1) {
+      return existingTitles[0].trim();
     }
 
-    // If no titles exist yet, fall back to pattern matching
-    const titleWords = existingTitles.join(" ").toLowerCase();
+    try {
+      // Use AI to determine the target role based on existing titles
+      const response = await fetch("/api/generate-target-role", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          existing_titles: existingTitles,
+          resume_context: baseResumeContent
+            ? baseResumeContent.substring(0, 500)
+            : "",
+          years_experience: yearsOfExperience,
+          language: language,
+        }),
+      });
 
-    if (
-      titleWords.includes("ai") ||
-      titleWords.includes("artificial intelligence") ||
-      titleWords.includes("machine learning") ||
-      titleWords.includes("ml engineer")
-    ) {
-      return "AI Engineer";
-    } else if (
-      titleWords.includes("frontend") ||
-      titleWords.includes("react") ||
-      titleWords.includes("ui")
-    ) {
-      return "Frontend Developer";
-    } else if (
-      titleWords.includes("backend") ||
-      titleWords.includes("api") ||
-      titleWords.includes("server")
-    ) {
-      return "Backend Engineer";
-    } else if (
-      titleWords.includes("full stack") ||
-      titleWords.includes("fullstack")
-    ) {
-      return "Full Stack Developer";
-    } else if (
-      titleWords.includes("data") ||
-      titleWords.includes("analytics")
-    ) {
-      return "Data Engineer";
-    } else if (
-      titleWords.includes("devops") ||
-      titleWords.includes("infrastructure")
-    ) {
-      return "DevOps Engineer";
-    } else if (
-      titleWords.includes("mobile") ||
-      titleWords.includes("ios") ||
-      titleWords.includes("android")
-    ) {
-      return "Mobile Developer";
-    } else if (titleWords.includes("senior") || titleWords.includes("lead")) {
-      return "Senior Software Engineer";
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.target_role) {
+          return data.target_role.trim();
+        }
+      }
+
+      // Fallback to the first title if AI fails
+      return existingTitles[0].trim();
+    } catch (error) {
+      console.error("Error generating target role:", error);
+      // Fallback to the first title if AI fails
+      return existingTitles[0].trim();
     }
-
-    return "Software Engineer"; // Default fallback
   };
 
   // Generate all fields for all valid rows
@@ -439,12 +744,16 @@ export function BulkJobGenerator({
         return;
       }
 
-      const targetRole = getTargetRole();
+      const targetRole = await getTargetRole();
       const contextWithResume = `Years of experience: ${yearsOfExperience}, Language: ${language}${
         baseResumeContent
           ? `, Resume context: ${baseResumeContent.substring(0, 500)}...`
           : ""
-      }${targetRole ? `, Target role: ${targetRole}` : ""}`;
+      }${
+        targetRole
+          ? `, IMPORTANT: Generate job titles consistent with this target role: "${targetRole}". All titles should be variations or similar positions to "${targetRole}".`
+          : ""
+      }`;
 
       // Make parallel requests for each valid job that has empty fields
       const promises = validJobs.map(async (job) => {
@@ -617,12 +926,10 @@ export function BulkJobGenerator({
       // Make parallel requests for each job needing titles
       const promises = jobsNeedingTitles.map(async (job) => {
         try {
-          const targetRole = getTargetRole();
-          const contextWithResume = `Years of experience: ${yearsOfExperience}, Language: ${language}${
-            targetRole ? `, Target role: ${targetRole}` : ""
-          }${
+          const targetRole = await getTargetRole();
+          const contextWithResume = `${
             baseResumeContent
-              ? `, Resume context: ${baseResumeContent.substring(0, 300)}`
+              ? `Resume context: ${baseResumeContent.substring(0, 300)}`
               : ""
           }`;
 
@@ -634,6 +941,9 @@ export function BulkJobGenerator({
             body: JSON.stringify({
               company_url: job.companyUrl,
               context: contextWithResume,
+              target_role: targetRole,
+              years_experience: yearsOfExperience,
+              language: language,
             }),
           });
 
@@ -642,6 +952,10 @@ export function BulkJobGenerator({
           }
 
           const data = await response.json();
+          if (!data.success) {
+            throw new Error(data.error || "Failed to generate job title");
+          }
+
           return {
             jobId: job.id,
             success: true,
@@ -721,9 +1035,9 @@ export function BulkJobGenerator({
       // Make parallel requests for each job needing descriptions
       const promises = jobsNeedingDescriptions.map(async (job) => {
         try {
-          const contextWithResume = `Years of experience: ${yearsOfExperience}, Language: ${language}${
+          const contextWithResume = `${
             baseResumeContent
-              ? `, Resume context: ${baseResumeContent.substring(0, 300)}`
+              ? `Resume context: ${baseResumeContent.substring(0, 300)}`
               : ""
           }`;
 
@@ -736,6 +1050,8 @@ export function BulkJobGenerator({
               company_url: job.companyUrl,
               job_title: job.jobTitle,
               context: contextWithResume,
+              years_experience: yearsOfExperience,
+              language: language,
             }),
           });
 
@@ -746,6 +1062,10 @@ export function BulkJobGenerator({
           }
 
           const data = await response.json();
+          if (!data.success) {
+            throw new Error(data.error || "Failed to generate job description");
+          }
+
           return {
             jobId: job.id,
             success: true,
@@ -835,6 +1155,8 @@ export function BulkJobGenerator({
               company_url: job.companyUrl,
               job_title: job.jobTitle,
               job_description: job.description,
+              years_experience: yearsOfExperience,
+              language: language,
             }),
           });
 
@@ -843,10 +1165,14 @@ export function BulkJobGenerator({
           }
 
           const data = await response.json();
+          if (!data.success) {
+            throw new Error(data.error || "Failed to generate skills");
+          }
+
           return {
             jobId: job.id,
             success: true,
-            skills: data.skills_string,
+            skills: data.skills,
           };
         } catch (err) {
           return {
@@ -913,9 +1239,11 @@ export function BulkJobGenerator({
     clearRowError(id);
 
     try {
-      const targetRole = getTargetRole();
+      const targetRole = await getTargetRole();
       const contextWithResume = `Years of experience: ${yearsOfExperience}, Language: ${language}${
-        targetRole ? `, Target role: ${targetRole}` : ""
+        targetRole
+          ? `, IMPORTANT: Generate job titles consistent with this target role: "${targetRole}". All titles should be variations or similar positions to "${targetRole}".`
+          : ""
       }${
         baseResumeContent
           ? `, Resume context: ${baseResumeContent.substring(0, 400)}`
@@ -1028,7 +1356,7 @@ export function BulkJobGenerator({
             body: JSON.stringify({
               job_title: job.jobTitle,
               job_description: job.description,
-              original_resume: baseResumeContent,
+              resumeText: baseResumeContent,
               additional_context: additionalContext,
             }),
           });
@@ -1256,7 +1584,7 @@ export function BulkJobGenerator({
                 <input
                   type="file"
                   id="resume-upload"
-                  accept=".pdf,.doc,.docx,.txt"
+                  accept=".pdf,.docx,.txt"
                   onChange={handleResumeUpload}
                   className="hidden"
                 />
@@ -1279,7 +1607,8 @@ export function BulkJobGenerator({
               </div>
               <p className="text-sm text-blue-600">
                 Upload your base resume to provide context for better job
-                generation. Supports PDF, Word, and text files.
+                generation. Supports PDF, DOCX, and text files. Legacy DOC files
+                are not supported.
               </p>
             </div>
           </div>
@@ -1387,11 +1716,11 @@ export function BulkJobGenerator({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 !hidden">
               <Button
                 onClick={generateAllTitles}
                 disabled={isGenerating !== null || bulkGenerating !== null}
-                className="bg-blue-500 hover:bg-blue-600 text-white border-0 shadow-md hover:shadow-lg transition-all"
+                className="bg-blue-500 hover:bg-blue-600 text-white border-0 shadow-md hover:shadow-lg transition-all !hidden"
                 size="lg"
               >
                 {bulkGenerating === "titles" ? (
@@ -1500,14 +1829,53 @@ export function BulkJobGenerator({
                 <div className="col-span-2 flex items-center gap-2">
                   <Target className="h-4 w-4 text-green-600" />
                   Job Title
+                  <Button
+                    onClick={generateAllTitles}
+                    disabled={isGenerating !== null || bulkGenerating !== null}
+                    className="bg-transparent text-black border-1 hover:text-white transition-all"
+                    size="icon"
+                    title="Generate Titles for All Rows"
+                  >
+                    {bulkGenerating === "titles" ? (
+                      <Loader2 className="h-2 w-2 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-2 w-2" />
+                    )}
+                  </Button>
                 </div>
                 <div className="col-span-4 flex items-center gap-2">
                   <FileText className="h-4 w-4 text-purple-600" />
                   Description
+                  <Button
+                    onClick={generateAllDescriptions}
+                    disabled={isGenerating !== null || bulkGenerating !== null}
+                    className="bg-transparent text-black border-1 hover:text-white transition-all"
+                    size="icon"
+                    title="Generate Descriptions for All Rows"
+                  >
+                    {bulkGenerating === "descriptions" ? (
+                      <Loader2 className="h-2 w-2 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-2 w-2" />
+                    )}
+                  </Button>
                 </div>
                 <div className="col-span-3 flex items-center gap-2">
                   <Brain className="h-4 w-4 text-orange-600" />
                   Skills
+                  <Button
+                    onClick={generateAllSkills}
+                    disabled={isGenerating !== null || bulkGenerating !== null}
+                    className="bg-transparent text-black border-1 hover:text-white transition-all"
+                    size="icon"
+                    title="Generate Skills for All Rows"
+                  >
+                    {bulkGenerating === "skills" ? (
+                      <Loader2 className=" h-2 w-2 animate-spin" />
+                    ) : (
+                      <Sparkles className=" h-2 w-2" />
+                    )}
+                  </Button>
                 </div>
                 <div className="col-span-1 text-center">Actions</div>
               </div>
@@ -1611,12 +1979,10 @@ export function BulkJobGenerator({
                             setIsGenerating(`${job.id}-title`);
                             clearRowError(job.id);
                             try {
-                              const targetRole = getTargetRole();
-                              const contextWithResume = `Years: ${yearsOfExperience}, Language: ${language}${
-                                targetRole ? `, Target role: ${targetRole}` : ""
-                              }${
+                              const targetRole = await getTargetRole();
+                              const contextWithResume = `${
                                 baseResumeContent
-                                  ? `, Resume: ${baseResumeContent.substring(
+                                  ? `Resume: ${baseResumeContent.substring(
                                       0,
                                       200
                                     )}`
@@ -1633,12 +1999,21 @@ export function BulkJobGenerator({
                                   body: JSON.stringify({
                                     company_url: job.companyUrl,
                                     context: contextWithResume,
+                                    target_role: targetRole,
+                                    years_experience: yearsOfExperience,
+                                    language: language,
                                   }),
                                 }
                               );
                               if (response.ok) {
                                 const data = await response.json();
-                                updateJob(job.id, "jobTitle", data.job_title);
+                                if (data.success) {
+                                  updateJob(job.id, "jobTitle", data.job_title);
+                                } else {
+                                  throw new Error(
+                                    data.error || "Failed to generate title"
+                                  );
+                                }
                               } else {
                                 throw new Error("Failed to generate title");
                               }
@@ -1685,9 +2060,9 @@ export function BulkJobGenerator({
                             setIsGenerating(`${job.id}-desc`);
                             clearRowError(job.id);
                             try {
-                              const contextWithResume = `Years: ${yearsOfExperience}, Language: ${language}${
+                              const contextWithResume = `${
                                 baseResumeContent
-                                  ? `, Resume: ${baseResumeContent.substring(
+                                  ? `Resume: ${baseResumeContent.substring(
                                       0,
                                       200
                                     )}`
@@ -1705,16 +2080,25 @@ export function BulkJobGenerator({
                                     company_url: job.companyUrl,
                                     job_title: job.jobTitle,
                                     context: contextWithResume,
+                                    years_experience: yearsOfExperience,
+                                    language: language,
                                   }),
                                 }
                               );
                               if (response.ok) {
                                 const data = await response.json();
-                                updateJob(
-                                  job.id,
-                                  "description",
-                                  data.job_description
-                                );
+                                if (data.success) {
+                                  updateJob(
+                                    job.id,
+                                    "description",
+                                    data.job_description
+                                  );
+                                } else {
+                                  throw new Error(
+                                    data.error ||
+                                      "Failed to generate description"
+                                  );
+                                }
                               } else {
                                 throw new Error(
                                   "Failed to generate description"
@@ -1774,12 +2158,20 @@ export function BulkJobGenerator({
                                     company_url: job.companyUrl,
                                     job_title: job.jobTitle,
                                     job_description: job.description,
+                                    years_experience: yearsOfExperience,
+                                    language: language,
                                   }),
                                 }
                               );
                               if (response.ok) {
                                 const data = await response.json();
-                                updateJob(job.id, "skills", data.skills_string);
+                                if (data.success) {
+                                  updateJob(job.id, "skills", data.skills);
+                                } else {
+                                  throw new Error(
+                                    data.error || "Failed to generate skills"
+                                  );
+                                }
                               } else {
                                 throw new Error("Failed to generate skills");
                               }

@@ -33,6 +33,7 @@ import { ResumeLoadingSkeleton } from "@/components/resume-loading-skeleton";
 import { ModernResumePreview } from "@/components/modern-resume-preview";
 import { sampleResume, sampleJobs } from "@/lib/sample-data";
 import { createModernResumeDocument } from "@/lib/resume-docx-generator";
+import { generateModernResumeDocx } from "@/lib/modern-resume-generator";
 
 interface Job {
   id: number;
@@ -44,6 +45,7 @@ interface TailoredResume {
   [jobId: number]: {
     status: "idle" | "loading" | "success" | "error";
     content?: string;
+    structuredData?: any; // Store the structured resume data from API
     error?: string;
   };
 }
@@ -235,25 +237,43 @@ export default function ResumeTailorPage() {
     setError(null);
 
     try {
-      // Send resume content directly instead of uploading as file
-      const startResponse = await fetch("/api/generate-resume/start", {
+      // Use the new structured API endpoint
+      const response = await fetch("/api/generate-tailored-resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          resumeContent: baseResumeText,
-          jobDescription: `${job.title}\n\n${job.description}`,
+          job_title: job.title,
+          job_description: job.description,
+          resumeText: baseResumeText,
         }),
       });
 
-      if (!startResponse.ok) {
-        const errorData = await startResponse.json().catch(() => ({}));
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          errorData.error || "Failed to start resume generation."
+          errorData.error || "Failed to generate tailored resume."
         );
       }
 
-      const { threadId, runId } = await startResponse.json();
-      pollForStatus(threadId, runId, job.id);
+      const responseData = await response.json();
+
+      if (!responseData.success) {
+        throw new Error(responseData.error || "Resume generation failed");
+      }
+
+      const tailoredResumeData = responseData.data.tailored_resume;
+
+      // Generate a formatted text version for display (optional fallback)
+      const formattedContent = formatResumeData(tailoredResumeData);
+
+      setTailoredResumes((prev) => ({
+        ...prev,
+        [job.id]: {
+          status: "success",
+          content: formattedContent,
+          structuredData: tailoredResumeData,
+        },
+      }));
     } catch (err: any) {
       setTailoredResumes((prev) => ({
         ...prev,
@@ -267,25 +287,102 @@ export default function ResumeTailorPage() {
     setJobs(sampleJobs);
     setShowDemo(true);
 
+    // Create sample structured data for demo
+    const sampleStructuredData = {
+      full_name: "John Smith",
+      source_content_analysis: {
+        has_email: true,
+        has_phone: true,
+        has_location: true,
+        has_linkedin: true,
+        has_github: false,
+        has_social_links: false,
+        has_relocation_willingness: false,
+        has_professional_summary: true,
+        has_skills: true,
+        has_work_experience: true,
+        has_education: true,
+        has_certifications: false,
+        has_projects: false,
+        has_languages: false,
+        has_awards: false,
+      },
+      contact_information: {
+        email: "john.smith@email.com",
+        phone: "(555) 123-4567",
+        location: "San Francisco, CA",
+        linkedin: "linkedin.com/in/johnsmith",
+      },
+      professional_summary:
+        "Experienced software engineer with 5+ years of expertise in full-stack development, cloud architecture, and team leadership. Proven track record of delivering scalable solutions and driving technical innovation in fast-paced environments.",
+      skills: [
+        "JavaScript",
+        "TypeScript",
+        "React",
+        "Node.js",
+        "Python",
+        "AWS",
+        "Docker",
+        "PostgreSQL",
+        "Git",
+        "Agile",
+      ],
+      work_experience: [
+        {
+          job_title: "Senior Software Engineer",
+          company: "Tech Corp",
+          location: "San Francisco, CA",
+          start_date: "2020-01",
+          end_date: null,
+          responsibilities: [
+            "Led development of microservices architecture serving 1M+ users",
+            "Implemented CI/CD pipelines reducing deployment time by 60%",
+            "Mentored 3 junior developers and conducted code reviews",
+            "Collaborated with product team to define technical requirements",
+          ],
+        },
+        {
+          job_title: "Software Engineer",
+          company: "StartupXYZ",
+          location: "San Francisco, CA",
+          start_date: "2018-06",
+          end_date: "2019-12",
+          responsibilities: [
+            "Built responsive web applications using React and Node.js",
+            "Designed and implemented RESTful APIs serving mobile and web clients",
+            "Optimized database queries improving application performance by 40%",
+          ],
+        },
+      ],
+      education: [
+        {
+          degree: "B.S. Computer Science",
+          institution: "Stanford University",
+          location: "California",
+          start_year: 2014,
+          end_year: 2018,
+        },
+      ],
+    };
+
     // Simulate some generated resumes for demo
     const demoResumes: TailoredResume = {};
     sampleJobs.forEach((job, index) => {
       if (index < 2) {
+        // Create tailored structured data for each job
+        const tailoredData = {
+          ...sampleStructuredData,
+          professional_summary: `${
+            sampleStructuredData.professional_summary
+          } Seeking to leverage expertise in ${job.title.toLowerCase()} to drive innovation and deliver exceptional results.`,
+        };
+
+        const formattedContent = formatResumeData(tailoredData);
+
         demoResumes[job.id] = {
           status: "success",
-          content: `${sampleResume}
-
-TAILORED FOR: ${job.title}
-
-This resume has been specifically tailored to highlight the most relevant experience and skills for the ${job.title} position. Key adjustments include:
-
-• Emphasized relevant technical skills and technologies mentioned in the job description
-• Highlighted specific achievements that align with the role requirements  
-• Adjusted professional summary to match the company's needs
-• Reordered experience to showcase most relevant positions first
-• Added keywords to improve ATS compatibility
-
-The tailored content maintains the candidate's authentic experience while presenting it in the most compelling way for this specific opportunity.`,
+          content: formattedContent,
+          structuredData: tailoredData,
         };
       }
     });
@@ -293,34 +390,134 @@ The tailored content maintains the candidate's authentic experience while presen
     setTailoredResumes(demoResumes);
   };
 
-  const downloadDocx = async (content: string, title: string) => {
+  const downloadDocx = async (jobId: number, title: string) => {
     try {
-      // Use the modern resume generator
-      const doc = createModernResumeDocument(content, title);
+      const resumeData = tailoredResumes[jobId];
+
+      if (!resumeData || !resumeData.structuredData) {
+        throw new Error("No structured resume data available");
+      }
+
+      // Use the modern resume generator with structured data
+      const doc = generateModernResumeDocx(resumeData.structuredData);
       const blob = await Packer.toBlob(doc);
       const safeTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
       saveAs(blob, `modern_resume_for_${safeTitle}.docx`);
     } catch (error) {
       console.error("Error generating DOCX:", error);
-      // Fallback to simple version if modern generator fails
-      const doc = new Document({
-        sections: [
-          {
-            properties: {},
-            children: content.split("\n").map(
-              (text) =>
-                new Paragraph({
-                  children: [new TextRun(text)],
-                })
-            ),
-          },
-        ],
-      });
 
-      const blob = await Packer.toBlob(doc);
-      const safeTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
-      saveAs(blob, `resume_for_${safeTitle}.docx`);
+      // Fallback to simple version if modern generator fails
+      const resumeData = tailoredResumes[jobId];
+      if (resumeData?.content) {
+        const doc = createModernResumeDocument(resumeData.content, title);
+        const blob = await Packer.toBlob(doc);
+        const safeTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+        saveAs(blob, `resume_for_${safeTitle}.docx`);
+      } else {
+        throw new Error("No resume content available for download");
+      }
     }
+  };
+
+  // Helper function to format structured resume data into readable text
+  const formatResumeData = (data: any): string => {
+    if (!data) return "";
+
+    let formatted = `${data.full_name}\n`;
+
+    // Add contact information (will be conditionally included based on source_content_analysis)
+    const contactParts = [];
+    if (
+      data.source_content_analysis?.has_email &&
+      data.contact_information?.email
+    ) {
+      contactParts.push(data.contact_information.email);
+    }
+    if (
+      data.source_content_analysis?.has_phone &&
+      data.contact_information?.phone
+    ) {
+      contactParts.push(data.contact_information.phone);
+    }
+    if (
+      data.source_content_analysis?.has_location &&
+      data.contact_information?.location
+    ) {
+      contactParts.push(data.contact_information.location);
+    }
+    if (
+      data.source_content_analysis?.has_linkedin &&
+      data.contact_information?.linkedin
+    ) {
+      contactParts.push(data.contact_information.linkedin);
+    }
+    if (
+      data.source_content_analysis?.has_github &&
+      data.contact_information?.github
+    ) {
+      contactParts.push(data.contact_information.github);
+    }
+    if (
+      data.source_content_analysis?.has_social_links &&
+      data.contact_information?.website
+    ) {
+      contactParts.push(data.contact_information.website);
+    }
+
+    if (contactParts.length > 0) {
+      formatted += contactParts.join(" • ") + "\n";
+    }
+
+    formatted += "\n";
+
+    if (
+      data.source_content_analysis?.has_professional_summary &&
+      data.professional_summary
+    ) {
+      formatted += "PROFESSIONAL SUMMARY\n";
+      formatted += data.professional_summary + "\n\n";
+    }
+
+    if (
+      data.source_content_analysis?.has_skills &&
+      data.skills &&
+      data.skills.length > 0
+    ) {
+      formatted += "SKILLS\n";
+      formatted += data.skills.join(" • ") + "\n\n";
+    }
+
+    if (
+      data.source_content_analysis?.has_work_experience &&
+      data.work_experience &&
+      data.work_experience.length > 0
+    ) {
+      formatted += "WORK EXPERIENCE\n";
+      data.work_experience.forEach((job: any) => {
+        formatted += `${job.job_title} at ${job.company}\n`;
+        formatted += `${job.start_date} - ${job.end_date || "Present"}\n`;
+        if (job.responsibilities && job.responsibilities.length > 0) {
+          job.responsibilities.forEach((resp: string) => {
+            formatted += `• ${resp}\n`;
+          });
+        }
+        formatted += "\n";
+      });
+    }
+
+    if (
+      data.source_content_analysis?.has_education &&
+      data.education &&
+      data.education.length > 0
+    ) {
+      formatted += "EDUCATION\n";
+      data.education.forEach((edu: any) => {
+        formatted += `${edu.degree} - ${edu.institution}\n`;
+        formatted += `${edu.start_year} - ${edu.end_year || "Present"}\n\n`;
+      });
+    }
+
+    return formatted;
   };
 
   return (
@@ -484,12 +681,7 @@ The tailored content maintains the candidate's authentic experience while presen
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() =>
-                              downloadDocx(
-                                tailoredResumes[job.id].content!,
-                                job.title
-                              )
-                            }
+                            onClick={() => downloadDocx(job.id, job.title)}
                           >
                             <Download className="mr-2 h-4 w-4" />
                             Download
@@ -546,7 +738,7 @@ The tailored content maintains the candidate's authentic experience while presen
                       content={resume.content!}
                       jobTitle={job?.title}
                       onDownload={() =>
-                        downloadDocx(resume.content!, job?.title || "resume")
+                        downloadDocx(parseInt(jobId), job?.title || "resume")
                       }
                       className="w-full"
                     />

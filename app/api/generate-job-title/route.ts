@@ -7,7 +7,13 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const { company_url, context = "" } = await request.json();
+    const {
+      company_url,
+      context = "",
+      target_role = "",
+      years_experience = 0,
+      language = "English",
+    } = await request.json();
 
     if (!company_url) {
       return NextResponse.json(
@@ -16,123 +22,72 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the assistant message with function calling
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an expert recruiter and job market analyst. Generate modern, concise job titles suitable for technical roles at companies.",
-        },
-        {
-          role: "user",
-          content: `Generate a job title for a company with URL: ${company_url}${
-            context ? ` with context: ${context}` : ""
-          }`,
-        },
-      ],
-      functions: [
-        {
-          name: "generate_job_title",
-          description:
-            "Generate a modern, concise job title suitable for a role at the given company. Use additional context if available, but only require the company URL.",
-          parameters: {
-            type: "object",
-            properties: {
-              company_url: {
-                type: "string",
-                description: "The main website URL of the company.",
-              },
-              context: {
-                type: "string",
-                description:
-                  "Optional: Any extra info or keywords about the team, department, or focus of the job.",
-              },
-            },
-            required: ["company_url", "context"],
-            additionalProperties: false,
-          },
-        },
-      ],
-      function_call: {
-        name: "generate_job_title",
-      },
-      temperature: 0.7,
-    });
-
-    const functionCall = completion.choices[0]?.message?.function_call;
-
-    if (!functionCall) {
-      return NextResponse.json(
-        { error: "Failed to generate job title" },
-        { status: 500 }
-      );
-    }
-
-    // Parse the function arguments to get the generated title
-    const functionArgs = JSON.parse(functionCall.arguments || "{}");
-
-    // For demo purposes, we'll generate a title based on the company URL
-    // In a real implementation, this would be handled by the assistant
+    // Extract company name from URL for context
     const domain = company_url
       .replace(/^https?:\/\//, "")
       .replace(/^www\./, "")
       .split(".")[0];
     const companyName = domain.charAt(0).toUpperCase() + domain.slice(1);
 
-    const jobTitles = [
-      "Senior Software Engineer",
-      "Full Stack Developer",
-      "Software Development Engineer",
-      "Backend Engineer",
-      "Frontend Developer",
-      "DevOps Engineer",
-      "Data Engineer",
-      "ML Engineer",
-      "Product Engineer",
-      "Platform Engineer",
-    ];
+    // Prepare the prompt for AI generation
+    const systemPrompt = `You are an expert recruiter and job market analyst. Generate modern, professional job titles that are:
+1. Realistic and commonly used in the industry
+2. Appropriate for the candidate's experience level
+3. Consistent with the target role when provided
+4. Suitable for the company context
+5. Professional and concise (typically 2-4 words)
 
-    // Add context-based titles if context is provided
-    const contextBasedTitles: { [key: string]: string[] } = {
-      frontend: ["Frontend Developer", "React Developer", "UI/UX Engineer"],
-      backend: ["Backend Engineer", "API Developer", "Server Engineer"],
-      mobile: ["Mobile Developer", "iOS Engineer", "Android Developer"],
-      data: ["Data Engineer", "Data Scientist", "Analytics Engineer"],
-      ai: ["ML Engineer", "AI Engineer", "Data Scientist"],
-      devops: [
-        "DevOps Engineer",
-        "Site Reliability Engineer",
-        "Cloud Engineer",
+Always return just the job title, nothing else.`;
+
+    let userPrompt = `Generate a job title for ${companyName}`;
+
+    if (target_role) {
+      userPrompt += ` for someone targeting a "${target_role}" role`;
+    }
+
+    if (years_experience > 0) {
+      userPrompt += ` with ${years_experience} years of experience`;
+    }
+
+    if (context) {
+      userPrompt += `. Additional context: ${context}`;
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        {
+          role: "user",
+          content: userPrompt,
+        },
       ],
-      security: [
-        "Security Engineer",
-        "Cybersecurity Specialist",
-        "InfoSec Engineer",
-      ],
-    };
+      max_tokens: 20,
+      temperature: 0.7,
+    });
 
-    let selectedTitle = jobTitles[Math.floor(Math.random() * jobTitles.length)];
+    const generatedTitle = completion.choices[0]?.message?.content?.trim();
 
-    // Check if context matches any specialized roles
-    const lowerContext = context.toLowerCase();
-    for (const [key, titles] of Object.entries(contextBasedTitles)) {
-      if (lowerContext.includes(key)) {
-        selectedTitle = titles[Math.floor(Math.random() * titles.length)];
-        break;
-      }
+    if (!generatedTitle) {
+      throw new Error("No job title generated");
     }
 
     return NextResponse.json({
-      job_title: selectedTitle,
+      success: true,
+      job_title: generatedTitle,
       company: companyName,
       generated_at: new Date().toISOString(),
     });
   } catch (error) {
     console.error("Error generating job title:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Internal server error",
+      },
       { status: 500 }
     );
   }
