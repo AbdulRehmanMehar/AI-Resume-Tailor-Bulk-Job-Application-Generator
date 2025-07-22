@@ -92,3 +92,83 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom styles for markdown rendering in job descriptions */
+.job-description-markdown {
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.job-description-markdown h1,
+.job-description-markdown h2,
+.job-description-markdown h3,
+.job-description-markdown h4,
+.job-description-markdown h5,
+.job-description-markdown h6 {
+  font-weight: 600;
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+  color: #374151;
+}
+
+.job-description-markdown h1 {
+  font-size: 1.125rem;
+}
+.job-description-markdown h2 {
+  font-size: 1rem;
+}
+.job-description-markdown h3 {
+  font-size: 0.875rem;
+}
+
+.job-description-markdown p {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.job-description-markdown ul,
+.job-description-markdown ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+  padding-left: 1.25rem;
+}
+
+.job-description-markdown li {
+  margin-top: 0.125rem;
+  margin-bottom: 0.125rem;
+}
+
+.job-description-markdown strong {
+  font-weight: 600;
+  color: #374151;
+}
+
+.job-description-markdown em {
+  font-style: italic;
+  color: #6b7280;
+}
+
+.job-description-markdown code {
+  background-color: #f3f4f6;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.8125rem;
+}
+
+.job-description-markdown blockquote {
+  border-left: 4px solid #e5e7eb;
+  padding-left: 1rem;
+  margin: 0.5rem 0;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.job-description-markdown a {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.job-description-markdown a:hover {
+  color: #2563eb;
+}

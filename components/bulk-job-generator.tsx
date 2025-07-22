@@ -34,6 +34,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import * as mammoth from "mammoth";
+import { marked } from "marked";
 import {
   downloadTailoredResume,
   generateModernResumeDocx,
@@ -77,6 +78,9 @@ export function BulkJobGenerator({
   const [includeDescriptions, setIncludeDescriptions] = useState(false);
   const [isUploadingExcel, setIsUploadingExcel] = useState(false);
   const [isGeneratingResumes, setIsGeneratingResumes] = useState(false);
+  const [editingDescriptions, setEditingDescriptions] = useState<Set<string>>(
+    new Set()
+  );
 
   const { toast } = useToast();
   const router = useRouter();
@@ -123,29 +127,199 @@ export function BulkJobGenerator({
       // Import pdfjs-dist dynamically to avoid SSR issues
       const pdfjs = await import("pdfjs-dist");
 
-      // Set worker path
+      // Set worker path with better error handling and fallbacks
       if (typeof window !== "undefined") {
-        pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+        // Use unpkg as primary CDN with HTTPS protocol for better compatibility
+        const workerUrls = [
+          `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`,
+          `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.mjs`,
+          `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`,
+          `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.js`,
+          `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`,
+          `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.mjs`,
+          `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`,
+          `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`,
+        ];
+
+        // Try to set worker with fallback mechanism
+        let workerSet = false;
+        for (const workerUrl of workerUrls) {
+          try {
+            pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+            console.log(
+              `🔧 Attempting to use PDF.js worker from: ${workerUrl}`
+            );
+            workerSet = true;
+            break;
+          } catch (e) {
+            console.warn(`⚠️ Failed to set worker URL: ${workerUrl}`, e);
+          }
+        }
+
+        if (!workerSet) {
+          console.warn(
+            "⚠️ No worker URL could be set, attempting inline worker"
+          );
+          // Fallback to using a blob URL with inline worker
+          try {
+            const workerCode = `
+              importScripts('https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js');
+            `;
+            const blob = new Blob([workerCode], {
+              type: "application/javascript",
+            });
+            pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+          } catch (e) {
+            console.warn("⚠️ Inline worker creation failed", e);
+          }
+        }
       }
+
+      console.log(
+        `📄 Attempting to extract text from PDF: ${file.name} (${(
+          file.size /
+          1024 /
+          1024
+        ).toFixed(2)} MB)`
+      );
 
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+
+      // Add additional options for better compatibility and error handling
+      const loadingTask = pdfjs.getDocument({
+        data: arrayBuffer,
+        useSystemFonts: true,
+        disableFontFace: false,
+        verbosity: 0, // Reduce console noise
+        isEvalSupported: false, // Disable eval for security
+        disableAutoFetch: false, // Allow auto-fetching
+        disableStream: false, // Allow streaming
+        disableRange: false, // Allow range requests
+        maxImageSize: 1024 * 1024, // Limit image size
+        cMapPacked: true, // Use packed character maps
+      });
+
+      // Add timeout for PDF loading
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(
+          () => reject(new Error("PDF loading timeout after 30 seconds")),
+          30000
+        );
+      });
+
+      const pdf = (await Promise.race([
+        loadingTask.promise,
+        timeoutPromise,
+      ])) as any;
+      console.log(`📊 PDF loaded successfully. Pages: ${pdf.numPages}`);
 
       let fullText = "";
+      let successfulPages = 0;
+      let failedPages = 0;
 
-      // Extract text from all pages
+      // Extract text from all pages with error handling per page
       for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const textItems = textContent.items as any[];
-        const pageText = textItems.map((item) => item.str).join(" ");
-        fullText += pageText + "\n";
+        try {
+          const pageTimeoutPromise = new Promise((_, reject) => {
+            setTimeout(
+              () => reject(new Error(`Page ${i} processing timeout`)),
+              10000
+            );
+          });
+
+          const pagePromise = (async () => {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const textItems = textContent.items as any[];
+
+            const pageText = textItems
+              .filter(
+                (item) =>
+                  item.str &&
+                  typeof item.str === "string" &&
+                  item.str.trim().length > 0
+              )
+              .map((item) => item.str.trim())
+              .join(" ");
+
+            // Clean up the page to free memory
+            page.cleanup();
+
+            return pageText;
+          })();
+
+          const pageText = (await Promise.race([
+            pagePromise,
+            pageTimeoutPromise,
+          ])) as string;
+
+          if (pageText.trim()) {
+            fullText += pageText + "\n";
+            successfulPages++;
+          }
+
+          console.log(
+            `✅ Page ${i}/${pdf.numPages} processed successfully (${pageText.length} chars)`
+          );
+        } catch (pageError) {
+          console.warn(`⚠️ Error processing page ${i}:`, pageError);
+          failedPages++;
+          // Continue with other pages even if one fails
+        }
       }
 
-      return fullText.trim();
+      const extractedText = fullText.trim();
+
+      if (!extractedText || extractedText.length < 10) {
+        throw new Error(
+          `No readable text found in PDF. The file might be an image-based PDF, password-protected, or corrupted. Successfully processed ${successfulPages}/${pdf.numPages} pages (${failedPages} failed).`
+        );
+      }
+
+      console.log(
+        `✅ Successfully extracted ${extractedText.length} characters from ${successfulPages}/${pdf.numPages} pages (${failedPages} failed)`
+      );
+      return extractedText;
     } catch (error) {
-      console.error("Error extracting text from PDF:", error);
-      throw new Error("Failed to extract text from PDF file");
+      console.error("❌ Error extracting text from PDF:", error);
+
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (
+          error.message.includes("Worker") ||
+          error.message.includes("worker")
+        ) {
+          throw new Error(
+            "PDF processing failed: Unable to load PDF.js worker. Please check your internet connection and try again."
+          );
+        } else if (
+          error.message.includes("Invalid PDF") ||
+          error.message.includes("invalid")
+        ) {
+          throw new Error(
+            "Invalid PDF file: The file appears to be corrupted or is not a valid PDF."
+          );
+        } else if (
+          error.message.includes("password") ||
+          error.message.includes("encrypted")
+        ) {
+          throw new Error(
+            "Password-protected PDF: This PDF requires a password and cannot be processed."
+          );
+        } else if (error.message.includes("timeout")) {
+          throw new Error(
+            "PDF processing timeout: The file is too large or complex. Please try a smaller PDF file."
+          );
+        } else if (error.message.includes("No readable text")) {
+          throw error; // Re-throw our custom message
+        } else {
+          throw new Error(`PDF processing failed: ${error.message}`);
+        }
+      }
+
+      throw new Error(
+        "Failed to extract text from PDF file. Please ensure the file is a valid, non-protected PDF with readable text content."
+      );
     }
   };
 
@@ -471,6 +645,29 @@ export function BulkJobGenerator({
       ...prev,
       [rowId]: message,
     }));
+  };
+
+  // Toggle description edit mode
+  const toggleDescriptionEdit = (jobId: string) => {
+    setEditingDescriptions((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(jobId)) {
+        newSet.delete(jobId);
+      } else {
+        newSet.add(jobId);
+      }
+      return newSet;
+    });
+  };
+
+  // Render markdown to HTML
+  const renderMarkdown = (markdown: string): string => {
+    try {
+      return marked.parse(markdown || "", { async: false }) as string;
+    } catch (error) {
+      console.error("Error parsing markdown:", error);
+      return markdown || "";
+    }
   };
 
   // Handle base resume upload
@@ -829,6 +1026,17 @@ export function BulkJobGenerator({
         if (result) {
           if (result.success) {
             clearRowError(job.id);
+            // Automatically switch to preview mode for generated descriptions
+            if (
+              result.jobDescription &&
+              (!job.description || job.description.trim() === "")
+            ) {
+              setEditingDescriptions((prev) => {
+                const newSet = new Set(prev);
+                newSet.delete(job.id);
+                return newSet;
+              });
+            }
             return {
               ...job,
               jobTitle: result.jobTitle,
@@ -1079,6 +1287,12 @@ export function BulkJobGenerator({
         if (result) {
           if (result.success) {
             clearRowError(job.id);
+            // Automatically switch to preview mode for generated descriptions
+            setEditingDescriptions((prev) => {
+              const newSet = new Set(prev);
+              newSet.delete(job.id);
+              return newSet;
+            });
             return { ...job, description: result.jobDescription };
           } else {
             setRowError(job.id, result.error || "Generation failed");
@@ -1259,6 +1473,11 @@ export function BulkJobGenerator({
       const data = await response.json();
 
       if (data.success) {
+        const currentJob = jobs.find((j) => j.id === id);
+        const willUpdateDescription =
+          currentJob &&
+          (!currentJob.description || currentJob.description.trim() === "");
+
         const updatedJobs = jobs.map((j) =>
           j.id === id
             ? {
@@ -1281,6 +1500,15 @@ export function BulkJobGenerator({
         );
 
         setJobs(updatedJobs);
+
+        // Automatically switch to preview mode if description was generated
+        if (willUpdateDescription) {
+          setEditingDescriptions((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(id);
+            return newSet;
+          });
+        }
       } else {
         throw new Error("Generation failed");
       }
@@ -1693,53 +1921,7 @@ export function BulkJobGenerator({
                           placeholder="Software Engineer"
                           className="border-gray-200 focus:border-green-500 focus:ring-green-500/20"
                         />
-                      </div>
-
-                      {/* Description */}
-                      <div className="col-span-4">
-                        <Textarea
-                          value={job.description}
-                          onChange={(e) =>
-                            updateJob(job.id, "description", e.target.value)
-                          }
-                          placeholder="Join our team and work on cutting-edge technology..."
-                          className="border-gray-200 focus:border-purple-500 focus:ring-purple-500/20 resize-none h-24 text-sm"
-                          rows={3}
-                        />
-                      </div>
-
-                      {/* Skills */}
-                      <div className="col-span-3">
-                        <Textarea
-                          value={job.skills}
-                          onChange={(e) =>
-                            updateJob(job.id, "skills", e.target.value)
-                          }
-                          placeholder="React, Node.js, Python, AWS..."
-                          className="border-gray-200 focus:border-orange-500 focus:ring-orange-500/20 resize-none h-24 text-sm"
-                          rows={3}
-                        />
-                      </div>
-
-                      {/* Actions */}
-                      <div className="col-span-1 flex flex-col gap-2">
-                        <Button
-                          onClick={() => generateRowContent(job.id)}
-                          disabled={
-                            isGenerating !== null || bulkGenerating !== null
-                          }
-                          size="sm"
-                          className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0 shadow-sm h-8 text-xs font-medium"
-                        >
-                          {isGenerating === job.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Sparkles className="h-3 w-3" />
-                          )}
-                        </Button>
-
-                        {/* Individual Generate Buttons */}
-                        <div className="flex flex-col gap-1">
+                        <div className="w-fit ml-auto">
                           <Button
                             onClick={async () => {
                               // Only generate if title is empty
@@ -1818,10 +2000,63 @@ export function BulkJobGenerator({
                             {isGenerating === `${job.id}-title` ? (
                               <Loader2 className="h-2 w-2 animate-spin" />
                             ) : (
-                              "T"
+                              <Sparkles className="h-3 w-3" />
                             )}
                           </Button>
+                        </div>
+                      </div>
 
+                      {/* Description */}
+                      <div className="col-span-4">
+                        {editingDescriptions.has(job.id) ? (
+                          <Textarea
+                            value={job.description}
+                            onChange={(e) =>
+                              updateJob(job.id, "description", e.target.value)
+                            }
+                            placeholder="Join our team and work on cutting-edge technology..."
+                            className="border-gray-200 focus:border-purple-500 focus:ring-purple-500/20 resize-y min-h-24 text-sm"
+                            style={{ minHeight: "96px" }}
+                          />
+                        ) : (
+                          <div
+                            className="border border-gray-200 rounded-md p-3 min-h-24 text-sm bg-gray-50/30 cursor-pointer hover:bg-gray-50"
+                            onClick={() => toggleDescriptionEdit(job.id)}
+                            style={{ minHeight: "96px" }}
+                          >
+                            {job.description ? (
+                              <div
+                                className="job-description-markdown"
+                                dangerouslySetInnerHTML={{
+                                  __html: renderMarkdown(job.description),
+                                }}
+                              />
+                            ) : (
+                              <span className="text-gray-400 italic">
+                                Click to add description or use the generate
+                                button...
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <div className="w-fit ml-auto mt-1 flex gap-1">
+                          <Button
+                            onClick={() => toggleDescriptionEdit(job.id)}
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs px-2 text-gray-600 border-gray-200"
+                            title={
+                              editingDescriptions.has(job.id)
+                                ? "View Preview"
+                                : "Edit Description"
+                            }
+                          >
+                            {editingDescriptions.has(job.id) ? (
+                              <Eye className="h-3 w-3" />
+                            ) : (
+                              <FileText className="h-3 w-3" />
+                            )}
+                          </Button>
                           <Button
                             onClick={async () => {
                               // Only generate if description is empty
@@ -1878,6 +2113,12 @@ export function BulkJobGenerator({
                                       "description",
                                       data.job_description
                                     );
+                                    // Automatically switch to preview mode after generation
+                                    setEditingDescriptions((prev) => {
+                                      const newSet = new Set(prev);
+                                      newSet.delete(job.id);
+                                      return newSet;
+                                    });
                                   } else {
                                     throw new Error(
                                       data.error ||
@@ -1908,10 +2149,24 @@ export function BulkJobGenerator({
                             {isGenerating === `${job.id}-desc` ? (
                               <Loader2 className="h-2 w-2 animate-spin" />
                             ) : (
-                              "D"
+                              <Sparkles className="h-3 w-3" />
                             )}
                           </Button>
+                        </div>
+                      </div>
 
+                      {/* Skills */}
+                      <div className="col-span-3">
+                        <Textarea
+                          value={job.skills}
+                          onChange={(e) =>
+                            updateJob(job.id, "skills", e.target.value)
+                          }
+                          placeholder="React, Node.js, Python, AWS..."
+                          className="border-gray-200 focus:border-orange-500 focus:ring-orange-500/20 resize-none h-24 text-sm"
+                          rows={3}
+                        />
+                        <div className="w-fit ml-auto">
                           <Button
                             onClick={async () => {
                               // Only generate if skills is empty
@@ -1976,10 +2231,31 @@ export function BulkJobGenerator({
                             {isGenerating === `${job.id}-skills` ? (
                               <Loader2 className="h-2 w-2 animate-spin" />
                             ) : (
-                              "S"
+                              <Sparkles className="h-3 w-3" />
                             )}
                           </Button>
                         </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="col-span-1 flex flex-col gap-2">
+                        <Button
+                          onClick={() => generateRowContent(job.id)}
+                          disabled={
+                            isGenerating !== null || bulkGenerating !== null
+                          }
+                          size="sm"
+                          className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0 shadow-sm h-8 text-xs font-medium"
+                        >
+                          {isGenerating === job.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3 w-3" />
+                          )}
+                        </Button>
+
+                        {/* Individual Generate Buttons */}
+                        <div className="flex flex-col gap-1"></div>
 
                         {jobs.length > 1 && (
                           <Button
