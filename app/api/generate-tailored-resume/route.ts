@@ -740,7 +740,18 @@ EXECUTE THE COMPREHENSIVE TAILORING STRATEGY: Generate a resume that transforms 
               {
                 role: "user",
                 content:
-                  "Please generate a tailored resume based on the provided information.",
+                  // "Please generate a tailored resume based on the provided information.",
+                  `
+You are an expert resume writer and prompt engineer. Your task is to tailor an existing resume for a specific job application, making sure it is optimized for Applicant Tracking Systems (ATS) and stands out to recruiters. Follow these steps:
+Analyze the Job Title and Job Description provided below.
+Review the Existing Resume provided.
+Identify the key skills, experiences, and qualifications in the job description.
+Rewrite, reorganize, and rephrase the resume as needed to best match the job requirements, using relevant keywords and accomplishments.
+Ensure the tailored resume is concise, results-driven, and free of unnecessary information.
+Keep the formatting simple (bullets for experience, bold headings, consistent spacing).
+All information should remain truthful, based on the original resume—do not invent degrees, jobs, or certifications.
+Output ONLY the revised resume, ready to be copied into a document or application form.
+                  `,
               },
             ],
             functions: [GENERATE_TAILORED_RESUME_SCHEMA],
