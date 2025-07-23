@@ -717,7 +717,22 @@ ${
     : ""
 }
 
-EXECUTE THE COMPREHENSIVE TAILORING STRATEGY: Generate a resume that transforms this candidate into the ideal applicant for this specific role through strategic repositioning, enhanced bullet points, and keyword optimization while maintaining complete factual accuracy.`;
+EXECUTE THE COMPREHENSIVE TAILORING STRATEGY: Generate a resume that transforms this candidate into the ideal applicant for this specific role through strategic repositioning, enhanced bullet points, and keyword optimization while maintaining complete factual accuracy. Please ensure following while generating the resume:
+
+(You are an expert resume writer and prompt engineer. Your task is to tailor an existing resume for a specific job application, making sure it is optimized for Applicant Tracking Systems (ATS) and stands out to recruiters. Follow these steps:
+Tailor my resume for the following job which I paste its descriptions
+Use ATS-friendly formatting and align it with the job description
+Match the job title in the header, integrate keywords from the description, Match the job description in the work experience job title, include a professional summary, core competencies, categorized technical skills, and four experience entries with 5–7 bullet points each and a ‘Selected project highlights and Awards and recognition and soft skills’
+Add achievements where possible
+Keep formatting consistent with my past resumes
+Output ONLY the revised resume, ready to be copied into a document or application form.
+Universal Tailoring Prompt for Resume Work Experience:
+"Tailor the work experience section of the resume to align with any provided job description. For each position in the work experience:
+Change the job title to reflect relevant terminology and keywords from the job description.
+Update the bullet points to emphasize relevant experiences, quantifiable achievements, and skills that match the responsibilities and requirements outlined in the job description.
+Job Description: [Insert job description details here]
+All information should remain truthful, based on the original resume—do not invent degrees, jobs or certifications. Do not include certifications not in original resume or languages.)
+`;
 
     // Helper function for making OpenAI API calls with retry logic
     const makeOpenAICallWithRetry = async (
@@ -743,14 +758,18 @@ EXECUTE THE COMPREHENSIVE TAILORING STRATEGY: Generate a resume that transforms 
                   // "Please generate a tailored resume based on the provided information.",
                   `
 You are an expert resume writer and prompt engineer. Your task is to tailor an existing resume for a specific job application, making sure it is optimized for Applicant Tracking Systems (ATS) and stands out to recruiters. Follow these steps:
-Analyze the Job Title and Job Description provided below.
-Review the Existing Resume provided.
-Identify the key skills, experiences, and qualifications in the job description.
-Rewrite, reorganize, and rephrase the resume as needed to best match the job requirements, using relevant keywords and accomplishments.
-Ensure the tailored resume is concise, results-driven, and free of unnecessary information.
-Keep the formatting simple (bullets for experience, bold headings, consistent spacing).
-All information should remain truthful, based on the original resume—do not invent degrees, jobs, or certifications.
+Tailor my resume for the following job which I paste its descriptions
+Use ATS-friendly formatting and align it with the job description
+Match the job title in the header, integrate keywords from the description, Match the job description in the work experience job title, include a professional summary, core competencies, categorized technical skills, and four experience entries with 5–7 bullet points each and a ‘Selected project highlights and Awards and recognition and soft skills’
+Add achievements where possible
+Keep formatting consistent with my past resumes
 Output ONLY the revised resume, ready to be copied into a document or application form.
+Universal Tailoring Prompt for Resume Work Experience:
+"Tailor the work experience section of the resume to align with any provided job description. For each position in the work experience:
+Change the job title to reflect relevant terminology and keywords from the job description.
+Update the bullet points to emphasize relevant experiences, quantifiable achievements, and skills that match the responsibilities and requirements outlined in the job description.
+Job Description: [Insert job description details here]
+All information should remain truthful, based on the original resume—do not invent degrees, jobs or certifications. Do not include certifications not in original resume or languages.
                   `,
               },
             ],
